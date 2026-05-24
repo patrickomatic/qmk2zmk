@@ -35,6 +35,12 @@ examples/
   zsa-qmk/        — ZSA Planck EZ source used as the reference example
 ```
 
+## Linting
+
+All code must pass `cargo clippy --all-targets -- -W clippy::pedantic -D warnings` with no errors. This is enforced by CI. Run it locally before committing.
+
+The one deliberate exception is `#[allow(clippy::implicit_hasher)]` on `parse_key_expr_str` — threading separate hasher type parameters through all private helpers adds noise without value for a CLI tool.
+
 ## Testing
 
 Run all tests with `cargo test`. There are three test suites:

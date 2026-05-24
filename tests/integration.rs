@@ -15,7 +15,7 @@ fn parses_four_layers() {
 fn layers_sorted_by_index() {
     let km = qmk_c::parse(KEYMAP_C).unwrap();
     for (i, layer) in km.layers.iter().enumerate() {
-        assert_eq!(layer.index, i, "layer {} out of order", i);
+        assert_eq!(layer.index, i, "layer {i} out of order");
     }
 }
 

@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
-use crate::ir::*;
+use crate::ir::{Keymap, Layer};
 
 #[derive(Deserialize)]
 struct QmkJson {
@@ -10,6 +10,9 @@ struct QmkJson {
     layers: Vec<Vec<String>>,
 }
 
+/// # Errors
+/// Returns a [`serde_json::Error`] if the source is not valid JSON or does
+/// not match the QMK Configurator keymap format.
 pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
     let qmk: QmkJson = serde_json::from_str(source)?;
 
@@ -22,7 +25,7 @@ pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
             let defines = HashMap::new();
             let custom_keycodes = HashSet::new();
             Layer {
-                name: format!("LAYER_{}", i),
+                name: format!("LAYER_{i}"),
                 index: i,
                 keys: keys
                     .iter()

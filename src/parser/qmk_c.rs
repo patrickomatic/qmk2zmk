@@ -2,10 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::codes;
 use crate::error::ParseCError;
-use crate::ir::*;
+use crate::ir::{Key, Keymap, Layer, TriLayer};
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
+/// # Errors
+/// Returns [`ParseCError`] if the keymaps array is missing, has unmatched
+/// delimiters, or a layer entry is structurally malformed.
 pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
     let cleaned = strip_comments(source);
 
@@ -45,8 +48,10 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
     })
 }
 
-/// Parse a single raw key expression string into a Key.  Public so the JSON
-/// parser can reuse the same logic.
+/// Parse a single raw key expression string into a [`Key`].  Public so the
+/// JSON parser can reuse the same logic.
+#[must_use]
+#[allow(clippy::implicit_hasher)]
 pub fn parse_key_expr_str(
     s: &str,
     layer_map: &HashMap<String, usize>,
@@ -109,8 +114,7 @@ fn extract_layer_names(s: &str) -> Vec<String> {
                 let looks_like_layers = enum_name.contains("layer")
                     || entries
                         .first()
-                        .map(|e| e.starts_with('_') || e == "BASE" || e == "QWERTY")
-                        .unwrap_or(false);
+                        .is_some_and(|e| e.starts_with('_') || e == "BASE" || e == "QWERTY");
 
                 if looks_like_layers && !entries.is_empty() {
                     return entries;
@@ -367,14 +371,14 @@ fn func_to_key(
             let layer = args[0].as_atom().unwrap_or("").trim();
             match resolve_layer(layer, layer_map) {
                 Some(idx) => Key::Mo(idx),
-                None => Key::Unknown(format!("MO({})", layer)),
+                None => Key::Unknown(format!("MO({layer})")),
             }
         }
         "TG" if args.len() == 1 => {
             let layer = args[0].as_atom().unwrap_or("").trim();
             match resolve_layer(layer, layer_map) {
                 Some(idx) => Key::Tog(idx),
-                None => Key::Unknown(format!("TG({})", layer)),
+                None => Key::Unknown(format!("TG({layer})")),
             }
         }
         "LT" if args.len() == 2 => {
@@ -385,20 +389,20 @@ fn func_to_key(
                 .to_string();
             match resolve_layer(layer, layer_map) {
                 Some(idx) => Key::Lt(idx, zmk_key),
-                None => Key::Unknown(format!("LT({}, {})", layer, key_str)),
+                None => Key::Unknown(format!("LT({layer}, {key_str})")),
             }
         }
         // Modifier-wrapping functions: LGUI(x), LSFT(x), etc.
         mod_fn if codes::qmk_mod_fn_to_zmk(mod_fn).is_some() && args.len() == 1 => {
             let prefix = codes::qmk_mod_fn_to_zmk(mod_fn).unwrap();
             let inner = build_zmk_key_expr(&args[0]);
-            Key::Kp(format!("{}({})", prefix, inner))
+            Key::Kp(format!("{prefix}({inner})"))
         }
         _ => Key::Unknown(format!(
             "{}({})",
             name,
             args.iter()
-                .map(|a| format!("{:?}", a))
+                .map(|a| format!("{a:?}"))
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
@@ -406,7 +410,7 @@ fn func_to_key(
 }
 
 /// Recursively build a ZMK key expression string for nested mod wrappers.
-/// E.g. LGUI(LSFT(KC_LBRC)) → "LG(LS(LBKT))"
+/// E.g. `LGUI(LSFT(KC_LBRC))` → "LG(LS(LBKT))"
 fn build_zmk_key_expr(expr: &Expr) -> String {
     match expr {
         Expr::Atom(name) => codes::qmk_key_to_zmk(name.trim())
@@ -416,9 +420,9 @@ fn build_zmk_key_expr(expr: &Expr) -> String {
             if let Some(prefix) = codes::qmk_mod_fn_to_zmk(name) {
                 return format!("{}({})", prefix, build_zmk_key_expr(&args[0]));
             }
-            format!("{}_UNKNOWN", name)
+            format!("{name}_UNKNOWN")
         }
-        Expr::Call { name, .. } => format!("{}_UNKNOWN", name),
+        Expr::Call { name, .. } => format!("{name}_UNKNOWN"),
     }
 }
 
@@ -447,15 +451,15 @@ mod tests {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     fn layer_map(pairs: &[(&str, usize)]) -> HashMap<String, usize> {
-        pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
+        pairs.iter().map(|(k, v)| ((*k).to_string(), *v)).collect()
     }
 
     fn defines(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect()
     }
 
     fn custom(names: &[&str]) -> HashSet<String> {
-        names.iter().map(|s| s.to_string()).collect()
+        names.iter().map(|s| (*s).to_string()).collect()
     }
 
     fn key(s: &str) -> Key {
@@ -675,7 +679,7 @@ mod tests {
 
     #[test]
     fn extracts_two_layers() {
-        let src = r#"
+        let src = r"
 const uint16_t PROGMEM keymaps[][4][4] = {
   [_BASE] = LAYOUT_grid(
     KC_A, KC_B,
@@ -685,7 +689,7 @@ const uint16_t PROGMEM keymaps[][4][4] = {
     KC_TRANSPARENT, KC_NO,
     KC_X, KC_Y
   ),
-};"#;
+};";
         let layers = extract_raw_layers(src).unwrap();
         assert_eq!(layers.len(), 2);
         assert_eq!(layers[0].0, "_BASE");
@@ -697,14 +701,14 @@ const uint16_t PROGMEM keymaps[][4][4] = {
 
     #[test]
     fn full_parse_minimal() {
-        let src = r#"
+        let src = r"
 enum test_layers { _BASE, _FN, };
 #define FN MO(_FN)
 const uint16_t PROGMEM keymaps[][1][4] = {
   [_BASE] = LAYOUT(KC_A, KC_B, FN, KC_TRANSPARENT),
   [_FN]   = LAYOUT(KC_X, KC_NO, KC_TRANSPARENT, KC_TRANSPARENT),
 };
-"#;
+";
         let km = super::parse(src).unwrap();
         assert_eq!(km.layers.len(), 2);
 
@@ -721,7 +725,7 @@ const uint16_t PROGMEM keymaps[][1][4] = {
 
     #[test]
     fn full_parse_with_tri_layer() {
-        let src = r#"
+        let src = r"
 enum kb_layers { _BASE, _LOWER, _RAISE, _ADJUST, };
 #define LOWER MO(_LOWER)
 #define RAISE MO(_RAISE)
@@ -734,7 +738,7 @@ const uint16_t PROGMEM keymaps[][1][2] = {
 uint8_t layer_state_set_user(uint8_t state) {
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
 }
-"#;
+";
         let km = super::parse(src).unwrap();
         let tri = km.tri_layer.expect("tri-layer should be detected");
         assert_eq!(tri.lower, 1);

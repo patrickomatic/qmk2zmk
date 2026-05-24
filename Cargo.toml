@@ -3,6 +3,8 @@ name = "qmk2zmk"
 version = "0.1.0"
 edition = "2024"
 description = "Convert QMK keymap files to ZMK format"
+keywords = ["qmk", "zmk", "convert"]
+categories = ["command-line-interface", "command-line-utilities"]
 
 [lib]
 path = "src/lib.rs"

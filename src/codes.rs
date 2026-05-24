@@ -1,5 +1,5 @@
 /// Map a QMK keycode (with or without KC_ prefix) to a ZMK key name.
-pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
+#[must_use] pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
     let key = qmk.strip_prefix("KC_").unwrap_or(qmk);
     Some(match key {
         // Letters
@@ -110,7 +110,7 @@ pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
 }
 
 /// Map a QMK MOD_* constant or modifier name to a ZMK modifier name.
-pub fn qmk_mod_to_zmk(qmk_mod: &str) -> &'static str {
+#[must_use] pub fn qmk_mod_to_zmk(qmk_mod: &str) -> &'static str {
     match qmk_mod.trim() {
         "MOD_LALT" | "LALT" => "LALT",
         "MOD_RALT" | "RALT" => "RALT",
@@ -125,7 +125,7 @@ pub fn qmk_mod_to_zmk(qmk_mod: &str) -> &'static str {
 }
 
 /// Map a QMK modifier-wrapping function name (LGUI, LSFT, etc.) to its ZMK prefix.
-pub fn qmk_mod_fn_to_zmk(name: &str) -> Option<&'static str> {
+#[must_use] pub fn qmk_mod_fn_to_zmk(name: &str) -> Option<&'static str> {
     Some(match name {
         "LGUI"           => "LG",
         "RGUI"           => "RG",
@@ -139,8 +139,8 @@ pub fn qmk_mod_fn_to_zmk(name: &str) -> Option<&'static str> {
     })
 }
 
-/// Map a QMK RGB function name to the corresponding ZMK rgb_ug action string.
-pub fn qmk_rgb_to_zmk(name: &str) -> Option<&'static str> {
+/// Map a QMK RGB function name to the corresponding ZMK `rgb_ug` action string.
+#[must_use] pub fn qmk_rgb_to_zmk(name: &str) -> Option<&'static str> {
     Some(match name {
         "RGB_TOG"                    => "RGB_TOG",
         "RGB_HUI"                    => "RGB_HUI",

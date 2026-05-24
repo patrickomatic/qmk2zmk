@@ -15,8 +15,8 @@ impl fmt::Display for Error {
         match self {
             Error::ReadFile { path, .. } => write!(f, "cannot read '{}'", path.display()),
             Error::WriteFile { path, .. } => write!(f, "cannot write '{}'", path.display()),
-            Error::ParseC(e) => write!(f, "QMK C keymap parse failed: {}", e),
-            Error::ParseJson(e) => write!(f, "QMK JSON keymap parse failed: {}", e),
+            Error::ParseC(e) => write!(f, "QMK C keymap parse failed: {e}"),
+            Error::ParseJson(e) => write!(f, "QMK JSON keymap parse failed: {e}"),
         }
     }
 }
@@ -24,8 +24,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::ReadFile { source, .. } => Some(source),
-            Error::WriteFile { source, .. } => Some(source),
+            Error::ReadFile { source, .. } | Error::WriteFile { source, .. } => Some(source),
             Error::ParseC(e) => Some(e),
             Error::ParseJson(e) => Some(e),
         }
