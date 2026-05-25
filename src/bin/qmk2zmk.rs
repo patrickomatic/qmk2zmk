@@ -2,7 +2,7 @@ use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
 use qmk2zmk::error::Error;
-use qmk2zmk::{io, qmk, zmk};
+use qmk2zmk::{codes, io, qmk, zmk};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum InputFormat {
@@ -14,7 +14,8 @@ enum InputFormat {
 #[command(name = "qmk2zmk", about = "Convert QMK keymap files to ZMK format")]
 struct Cli {
     /// Input file (keymap.c or keymap.json)
-    input: PathBuf,
+    #[arg(required_unless_present = "list_keyboards")]
+    input: Option<PathBuf>,
 
     /// Input format — auto-detected from file extension if not given
     #[arg(short, long, value_enum)]
@@ -23,6 +24,18 @@ struct Cli {
     /// Output file (defaults to stdout)
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Known keyboard name to set column count (see --list-keyboards)
+    #[arg(long)]
+    keyboard: Option<String>,
+
+    /// Override columns per row in ZMK output
+    #[arg(long)]
+    cols: Option<usize>,
+
+    /// List known keyboards and their column counts, then exit
+    #[arg(long)]
+    list_keyboards: bool,
 
     /// Print warnings for unmapped keycodes to stderr
     #[arg(short, long)]
@@ -38,8 +51,15 @@ fn main() {
 fn run() -> Result<(), Error> {
     let cli = Cli::parse();
 
+    if cli.list_keyboards {
+        print_keyboard_list();
+        return Ok(());
+    }
+
+    let input = cli.input.expect("required_unless_present = list_keyboards");
+
     let format = cli.format.unwrap_or_else(|| {
-        match cli.input.extension().and_then(|e| e.to_str()) {
+        match input.extension().and_then(|e| e.to_str()) {
             Some("c")    => InputFormat::C,
             Some("json") => InputFormat::Json,
             _ => {
@@ -49,7 +69,7 @@ fn run() -> Result<(), Error> {
         }
     });
 
-    let source = io::read_input(&cli.input)?;
+    let source = io::read_input(&input)?;
 
     let keymap = match format {
         InputFormat::C    => qmk::parse_c::parse(&source).map_err(Error::ParseC)?,
@@ -59,6 +79,15 @@ fn run() -> Result<(), Error> {
     if cli.verbose {
         qmk2zmk::warn_unknowns(&keymap);
     }
-    let output = zmk::render(&keymap);
+
+    let cols = cli.cols.or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
+    let output = zmk::render(&keymap, cols);
     io::write_output(&output, cli.output.as_deref())
+}
+
+fn print_keyboard_list() {
+    println!("{:<14} Columns", "Keyboard");
+    for (name, cols) in codes::KNOWN_KEYBOARDS {
+        println!("{name:<14} {cols}");
+    }
 }

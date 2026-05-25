@@ -123,7 +123,7 @@ fn tri_layer_detected() {
 #[test]
 fn output_is_valid_zmk_skeleton() {
     let km = qmk_c::parse(KEYMAP_C).unwrap();
-    let out = zmk::render(&km);
+    let out = zmk::render(&km, None);
     assert!(out.contains("#include <behaviors.dtsi>"));
     assert!(out.contains("#include <dt-bindings/zmk/keys.h>"));
     assert!(out.contains("#include <dt-bindings/zmk/rgb.h>"));

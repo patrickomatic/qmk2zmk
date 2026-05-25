@@ -373,6 +373,29 @@ pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
     })
 }
 
+/// Known keyboards and their default output column counts.
+pub const KNOWN_KEYBOARDS: &[(&str, usize)] = &[
+    ("planck",   12),
+    ("preonic",  12),
+    ("contra",   12),
+    ("levinson", 12),
+    ("nyquist",  12),
+    ("corne",     6),
+    ("crkbd",     6),
+    ("kyria",     7),
+    ("lily58",    7),
+];
+
+/// Return the column count for a keyboard matched by substring, case-insensitive.
+#[must_use]
+pub fn keyboard_cols(name: &str) -> Option<usize> {
+    let lower = name.to_lowercase();
+    KNOWN_KEYBOARDS
+        .iter()
+        .find(|(k, _)| lower.contains(*k))
+        .map(|(_, cols)| *cols)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

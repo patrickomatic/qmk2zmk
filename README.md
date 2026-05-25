@@ -34,16 +34,19 @@ cargo install qmk2zmk
 ### qmk2zmk
 
 ```
-qmk2zmk [OPTIONS] <INPUT>
+qmk2zmk [OPTIONS] [INPUT]
 
 Arguments:
-  <INPUT>  Input file (keymap.c or keymap.json)
+  [INPUT]  Input file (keymap.c or keymap.json)
 
 Options:
-  -f, --format <FORMAT>  Input format: c or json (auto-detected from extension)
-  -o, --output <OUTPUT>  Output file (defaults to stdout)
-  -v, --verbose          Print warnings for unmapped keycodes to stderr
-  -h, --help             Print help
+  -f, --format <FORMAT>      Input format: c or json (auto-detected from extension)
+  -o, --output <OUTPUT>      Output file (defaults to stdout)
+      --keyboard <KEYBOARD>  Known keyboard name (sets column count; see --list-keyboards)
+      --cols <COLS>          Override columns per row in ZMK output
+      --list-keyboards       List known keyboards and their column counts, then exit
+  -v, --verbose              Print warnings for unmapped keycodes to stderr
+  -h, --help                 Print help
 ```
 
 ```sh
@@ -56,6 +59,15 @@ qmk2zmk keymap.c -o my_keymap.keymap
 # Show warnings for any keys that couldn't be mapped
 qmk2zmk keymap.c -v
 
+# Specify keyboard to set column count in output
+qmk2zmk keymap.c --keyboard planck
+
+# Override column count directly
+qmk2zmk keymap.c --cols 10
+
+# List known keyboards
+qmk2zmk --list-keyboards
+
 # Explicit format flag
 qmk2zmk -f json keymap.json -o my_keymap.keymap
 ```
@@ -63,17 +75,20 @@ qmk2zmk -f json keymap.json -o my_keymap.keymap
 ### zmk2qmk
 
 ```
-zmk2qmk [OPTIONS] <INPUT>
+zmk2qmk [OPTIONS] [INPUT]
 
 Arguments:
-  <INPUT>  Input file (.keymap DTS overlay)
+  [INPUT]  Input file (.keymap DTS overlay)
 
 Options:
-  -f, --format <FORMAT>  Output format: json or c [default: json]
-      --layout <LAYOUT>  QMK LAYOUT macro name used in C output [default: LAYOUT]
-  -o, --output <OUTPUT>  Output file (defaults to stdout)
-  -v, --verbose          Print warnings for unmapped keycodes to stderr
-  -h, --help             Print help
+  -f, --format <FORMAT>      Output format: json or c [default: json]
+      --layout <LAYOUT>      QMK LAYOUT macro name used in C output [default: LAYOUT]
+  -o, --output <OUTPUT>      Output file (defaults to stdout)
+      --keyboard <KEYBOARD>  Known keyboard name (sets column count; see --list-keyboards)
+      --cols <COLS>          Override columns per row in QMK C output
+      --list-keyboards       List known keyboards and their column counts, then exit
+  -v, --verbose              Print warnings for unmapped keycodes to stderr
+  -h, --help                 Print help
 ```
 
 ```sh
@@ -85,6 +100,12 @@ zmk2qmk my_keymap.keymap -f c -o keymap.c
 
 # Specify the layout macro for C output
 zmk2qmk my_keymap.keymap -f c --layout LAYOUT_planck_grid -o keymap.c
+
+# Specify keyboard to set column count in output
+zmk2qmk my_keymap.keymap -f c --keyboard corne
+
+# List known keyboards
+zmk2qmk --list-keyboards
 ```
 
 ## What gets converted

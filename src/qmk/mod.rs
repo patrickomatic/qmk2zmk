@@ -55,7 +55,7 @@ pub fn render_json(keymap: &Keymap) -> String {
 /// The LAYOUT macro name defaults to `LAYOUT`; pass a custom name via
 /// [`Keymap::layout`] if you know the keyboard's actual macro name.
 #[must_use]
-pub fn render_c(keymap: &Keymap) -> String {
+pub fn render_c(keymap: &Keymap, cols_override: Option<usize>) -> String {
     let layout = keymap.layout.as_deref().unwrap_or("LAYOUT");
     let mut out = String::new();
 
@@ -81,7 +81,7 @@ pub fn render_c(keymap: &Keymap) -> String {
 
         let rendered: Vec<String> = layer.keys.iter().map(key_to_qmk_str).collect();
         let col_width = rendered.iter().map(String::len).max().unwrap_or(6).min(20) + 1;
-        let cols = infer_cols(layer.keys.len());
+        let cols = cols_override.unwrap_or_else(|| infer_cols(layer.keys.len()));
 
         for (i, k) in rendered.iter().enumerate() {
             if i % cols == 0 {
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn c_basic_structure() {
         let km = simple_keymap(vec![Key::Kp("Q".into()), Key::Trans]);
-        let out = render_c(&km);
+        let out = render_c(&km, None);
         assert!(out.contains("#include QMK_KEYBOARD_H"));
         assert!(out.contains("keymaps[][MATRIX_ROWS][MATRIX_COLS]"));
         assert!(out.contains("LAYOUT("));
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn c_layer_enum() {
         let km = simple_keymap(vec![Key::Trans]);
-        let out = render_c(&km);
+        let out = render_c(&km, None);
         assert!(out.contains("enum layers"));
         assert!(out.contains("_BASE"));
     }
