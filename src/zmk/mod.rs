@@ -56,15 +56,20 @@ fn render_macros(out: &mut String, keymap: &Keymap) {
         let _ = writeln!(out, "        {}: {} {{", m.name, m.name);
         out.push_str("            compatible = \"zmk,behavior-macro\";\n");
         out.push_str("            #binding-cells = <0>;\n");
-        let steps: Vec<String> = m
-            .steps
-            .iter()
-            .map(|s| match s {
-                MacroStep::Tap(k) => format!("<&kp {k}>"),
-                MacroStep::Wait(ms) => format!("<&macro_wait_time {ms}>"),
-            })
-            .collect();
-        let _ = writeln!(out, "            bindings = {}", steps.join(", "));
+        if m.steps.is_empty() {
+            out.push_str("            // TODO: fill in macro steps\n");
+            out.push_str("            bindings = <&none>;\n");
+        } else {
+            let steps: Vec<String> = m
+                .steps
+                .iter()
+                .map(|s| match s {
+                    MacroStep::Tap(k) => format!("<&kp {k}>"),
+                    MacroStep::Wait(ms) => format!("<&macro_wait_time {ms}>"),
+                })
+                .collect();
+            let _ = writeln!(out, "            bindings = {};", steps.join(", "));
+        }
         out.push_str("        };\n");
     }
 
@@ -152,7 +157,10 @@ fn render_key(key: &Key) -> String {
 }
 
 fn layer_label(name: &str) -> String {
-    let base = name.trim_start_matches('_').to_lowercase();
+    let base = name
+        .trim_start_matches('_')
+        .trim_end_matches("_layer")
+        .to_lowercase();
     if base.is_empty() { "default_layer".into() } else { format!("{base}_layer") }
 }
 
@@ -264,6 +272,10 @@ mod tests {
         assert_eq!(layer_label("_ADJUST"), "adjust_layer");
         assert_eq!(layer_label("QWERTY"),  "qwerty_layer");
         assert_eq!(layer_label(""),        "default_layer");
+        // Round-trip: names already ending in _layer should not double it
+        assert_eq!(layer_label("base_layer"),   "base_layer");
+        assert_eq!(layer_label("lower_layer"),  "lower_layer");
+        assert_eq!(layer_label("adjust_layer"), "adjust_layer");
     }
 
     #[test]

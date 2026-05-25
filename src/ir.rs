@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Keymap {
     pub keyboard: Option<String>,
     pub layout: Option<String>,
@@ -7,14 +7,14 @@ pub struct Keymap {
     pub tri_layer: Option<TriLayer>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layer {
     pub name: String,
     pub index: usize,
     pub keys: Vec<Key>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Key {
     Kp(String),
     Mo(usize),
@@ -38,19 +38,19 @@ pub enum Key {
     Unknown(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacroDef {
     pub name: String,
     pub steps: Vec<MacroStep>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MacroStep {
     Tap(String),
     Wait(u32),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TriLayer {
     pub lower: usize,
     pub upper: usize,
