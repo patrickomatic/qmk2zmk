@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::ParseZmkError;
-use crate::ir::{Key, Keymap, Layer, MacroDef, MacroStep, TriLayer};
+use crate::ir::{Key, Keymap, Layer, MacroDef, MacroStep, TapDanceDef, TriLayer};
 
 /// Parse a ZMK `.keymap` DTS overlay into the internal `Keymap` IR.
 ///
@@ -13,9 +13,15 @@ pub fn parse(source: &str) -> Result<Keymap, ParseZmkError> {
     let tri_layer = extract_tri_layer(&s);
     let macros = extract_macros(&s);
     let macro_names: HashSet<&str> = macros.iter().map(|m| m.name.as_str()).collect();
+    let tap_dances = extract_behaviors_tap_dances(&s, &macro_names);
+    let tap_dance_labels: HashMap<&str, usize> = tap_dances
+        .iter()
+        .enumerate()
+        .map(|(i, td)| (td.name.as_str(), i))
+        .collect();
     let keymap_body = block_content(&s, "keymap").ok_or(ParseZmkError::NoKeymapBlock)?;
-    let layers = extract_layers(keymap_body, &macro_names)?;
-    Ok(Keymap { keyboard: None, layout: None, layers, macros, tri_layer })
+    let layers = extract_layers(keymap_body, &macro_names, &tap_dance_labels)?;
+    Ok(Keymap { keyboard: None, layout: None, layers, macros, tap_dances, tri_layer })
 }
 
 fn strip_comments(s: &str) -> String {
@@ -155,7 +161,11 @@ fn parse_macro_steps(s: &str) -> Vec<MacroStep> {
     steps
 }
 
-fn extract_layers(s: &str, macro_names: &HashSet<&str>) -> Result<Vec<Layer>, ParseZmkError> {
+fn extract_layers(
+    s: &str,
+    macro_names: &HashSet<&str>,
+    tap_dance_labels: &HashMap<&str, usize>,
+) -> Result<Vec<Layer>, ParseZmkError> {
     let mut layers = Vec::new();
     let mut pos = 0;
     while let Some(brace_rel) = s[pos..].find('{') {
@@ -171,7 +181,7 @@ fn extract_layers(s: &str, macro_names: &HashSet<&str>) -> Result<Vec<Layer>, Pa
         if !block.contains("bindings") {
             continue;
         }
-        let keys = parse_binding_list(bindings_str(block).unwrap_or(""), macro_names);
+        let keys = parse_binding_list(bindings_str(block).unwrap_or(""), macro_names, tap_dance_labels);
         let idx = layers.len();
         layers.push(Layer {
             name: if name.is_empty() { format!("layer{idx}") } else { name.to_string() },
@@ -191,17 +201,25 @@ fn bindings_str(block: &str) -> Option<&str> {
     Some(&inner[..close])
 }
 
-fn parse_binding_list(s: &str, macro_names: &HashSet<&str>) -> Vec<Key> {
+fn parse_binding_list(
+    s: &str,
+    macro_names: &HashSet<&str>,
+    tap_dance_labels: &HashMap<&str, usize>,
+) -> Vec<Key> {
     s.split('&')
         .skip(1)
         .filter_map(|chunk| {
             let tokens: Vec<&str> = chunk.split_whitespace().collect();
-            if tokens.is_empty() { None } else { Some(binding_to_key(&tokens, macro_names)) }
+            if tokens.is_empty() { None } else { Some(binding_to_key(&tokens, macro_names, tap_dance_labels)) }
         })
         .collect()
 }
 
-fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
+fn binding_to_key(
+    tokens: &[&str],
+    macro_names: &HashSet<&str>,
+    tap_dance_labels: &HashMap<&str, usize>,
+) -> Key {
     match tokens[0] {
         "kp" => tokens.get(1).map_or(
             Key::Unknown("kp".into()),
@@ -262,9 +280,72 @@ fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
             Key::Unknown("rgb_ug".into()),
             |a| Key::RgbUg((*a).to_string()),
         ),
+        name if tap_dance_labels.contains_key(name) => Key::TapDance(tap_dance_labels[name]),
         name if macro_names.contains(name) => Key::Macro(name.to_string()),
         _ => Key::Unknown(format!("&{}", tokens.join(" "))),
     }
+}
+
+// ── Behaviors block (tap dance) ───────────────────────────────────────────────
+
+fn extract_behaviors_tap_dances(s: &str, macro_names: &HashSet<&str>) -> Vec<TapDanceDef> {
+    let Some(content) = block_content(s, "behaviors") else { return vec![] };
+    let mut tap_dances = Vec::new();
+    let mut pos = 0;
+    while let Some(brace_rel) = content[pos..].find('{') {
+        let brace_pos = pos + brace_rel;
+        let Some(close) = find_matching(&content[brace_pos..], '{', '}') else { break };
+        let block_body = &content[brace_pos + 1..brace_pos + close];
+        pos = brace_pos + close + 1;
+        if !block_body.contains("zmk,behavior-tap-dance") {
+            continue;
+        }
+        let label = label_before_brace(content, brace_pos);
+        let bindings = tap_dance_binding_list(block_body, macro_names);
+        tap_dances.push(TapDanceDef { name: label.to_string(), bindings });
+    }
+    tap_dances
+}
+
+/// Return the DTS label (before the colon) for the node whose opening brace is
+/// at `brace_pos`.  Falls back to the node name if there is no label.
+fn label_before_brace(s: &str, brace_pos: usize) -> &str {
+    let before = s[..brace_pos].trim_end();
+    if let Some(colon) = before.rfind(':') {
+        let label_region = before[..colon].trim_end();
+        let start = label_region
+            .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+            .map_or(0, |i| i + 1);
+        &label_region[start..]
+    } else {
+        identifier_before(s, brace_pos)
+    }
+}
+
+/// Parse the tap-dance `bindings = <&foo X>, <&bar Y>;` line in a behavior
+/// block.  Each `<…>` group is a single binding.
+fn tap_dance_binding_list(block: &str, macro_names: &HashSet<&str>) -> Vec<Key> {
+    let Some(start) = block.find("bindings") else { return vec![] };
+    let after_kw = &block[start + "bindings".len()..];
+    let semi_end = after_kw.find(';').unwrap_or(after_kw.len());
+    let region = &after_kw[..semi_end];
+
+    let empty_td_labels = HashMap::new();
+    let mut keys = Vec::new();
+    let mut pos = 0;
+    while let Some(open_rel) = region[pos..].find('<') {
+        let open = pos + open_rel + 1;
+        let Some(close_rel) = region[open..].find('>') else { break };
+        let inner = &region[open..open + close_rel];
+        if let Some(after_amp) = inner.split('&').nth(1) {
+            let tokens: Vec<&str> = after_amp.split_whitespace().collect();
+            if !tokens.is_empty() {
+                keys.push(binding_to_key(&tokens, macro_names, &empty_td_labels));
+            }
+        }
+        pos = open + close_rel + 1;
+    }
+    keys
 }
 
 /// Extract the identifier immediately before position `brace_pos` in `s`.
@@ -448,5 +529,65 @@ mod tests {
         let keys = &km.layers[0].keys;
         assert!(matches!(&keys[0], Key::Unknown(s) if s.contains("bt") && s.contains("BT_SEL")));
         assert!(matches!(&keys[1], Key::Unknown(s) if s.contains("out") && s.contains("OUT_USB")));
+    }
+
+    #[test]
+    fn parses_tap_dance_behavior() {
+        let src = r#"
+/ {
+    behaviors {
+        td0: tap_dance_0 {
+            compatible = "zmk,behavior-tap-dance";
+            #binding-cells = <0>;
+            tapping-term-ms = <200>;
+            bindings = <&kp LSHFT>, <&kp CAPS>;
+        };
+    };
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <&td0 &kp A>;
+        };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        assert_eq!(km.tap_dances.len(), 1);
+        assert_eq!(km.tap_dances[0].name, "td0");
+        assert_eq!(km.tap_dances[0].bindings.len(), 2);
+        assert!(matches!(&km.tap_dances[0].bindings[0], Key::Kp(k) if k == "LSHFT"));
+        assert!(matches!(&km.tap_dances[0].bindings[1], Key::Kp(k) if k == "CAPS"));
+        let keys = &km.layers[0].keys;
+        assert!(matches!(&keys[0], Key::TapDance(0)));
+        assert!(matches!(&keys[1], Key::Kp(k) if k == "A"));
+    }
+
+    #[test]
+    fn parses_multiple_tap_dances() {
+        let src = r#"
+/ {
+    behaviors {
+        td0: tap_dance_0 {
+            compatible = "zmk,behavior-tap-dance";
+            #binding-cells = <0>;
+            tapping-term-ms = <200>;
+            bindings = <&kp A>, <&kp B>;
+        };
+        td1: tap_dance_1 {
+            compatible = "zmk,behavior-tap-dance";
+            #binding-cells = <0>;
+            tapping-term-ms = <200>;
+            bindings = <&kp C>, <&kp D>, <&kp E>;
+        };
+    };
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer { bindings = <&td0 &td1>; };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        assert_eq!(km.tap_dances.len(), 2);
+        assert!(matches!(&km.layers[0].keys[0], Key::TapDance(0)));
+        assert!(matches!(&km.layers[0].keys[1], Key::TapDance(1)));
+        assert_eq!(km.tap_dances[1].bindings.len(), 3);
     }
 }

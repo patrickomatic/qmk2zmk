@@ -4,7 +4,7 @@ pub mod parse_json;
 use std::fmt::Write as _;
 
 use crate::codes;
-use crate::ir::{Key, Keymap};
+use crate::ir::{Key, Keymap, TapDanceDef};
 
 /// Render a `Keymap` as a QMK Configurator JSON string.
 ///
@@ -14,10 +14,11 @@ pub fn render_json(keymap: &Keymap) -> String {
     let keyboard = keymap.keyboard.as_deref().unwrap_or("unknown");
     let layout = keymap.layout.as_deref().unwrap_or("LAYOUT");
 
+    let tap_dances = &keymap.tap_dances;
     let layers: Vec<Vec<String>> = keymap
         .layers
         .iter()
-        .map(|l| l.keys.iter().map(key_to_qmk_str).collect())
+        .map(|l| l.keys.iter().map(|k| key_to_qmk_str(k, tap_dances)).collect())
         .collect();
 
     // Build JSON manually to avoid pulling in a serialization derive on the output side.
@@ -63,6 +64,10 @@ pub fn render_c(keymap: &Keymap, cols_override: Option<usize>) -> String {
     out.push_str("// Review and adjust before flashing\n\n");
     out.push_str("#include QMK_KEYBOARD_H\n\n");
 
+    if !keymap.tap_dances.is_empty() {
+        render_c_tap_dances(&mut out, keymap);
+    }
+
     if !keymap.macros.is_empty() {
         render_c_macros(&mut out, keymap);
     }
@@ -79,7 +84,7 @@ pub fn render_c(keymap: &Keymap, cols_override: Option<usize>) -> String {
     for layer in &keymap.layers {
         let _ = writeln!(out, "    [{}] = {layout}(", layer_enum_name(&layer.name));
 
-        let rendered: Vec<String> = layer.keys.iter().map(key_to_qmk_str).collect();
+        let rendered: Vec<String> = layer.keys.iter().map(|k| key_to_qmk_str(k, &keymap.tap_dances)).collect();
         let col_width = rendered.iter().map(String::len).max().unwrap_or(6).min(20) + 1;
         let cols = cols_override.unwrap_or_else(|| infer_cols(layer.keys.len()));
 
@@ -115,7 +120,7 @@ fn render_c_macros(out: &mut String, keymap: &Keymap) {
     out.push_str("}\n\n");
 }
 
-fn key_to_qmk_str(key: &Key) -> String {
+fn key_to_qmk_str(key: &Key, tap_dances: &[TapDanceDef]) -> String {
     match key {
         Key::Trans         => "KC_TRNS".into(),
         Key::None          => "KC_NO".into(),
@@ -140,8 +145,31 @@ fn key_to_qmk_str(key: &Key) -> String {
         Key::RgbUg(a)      => codes::zmk_rgb_to_qmk(a)
                                    .map_or_else(|| format!("/* {a} */"), Into::into),
         Key::Macro(name)   => name.clone(),
+        Key::TapDance(n)   => tap_dances.get(*n)
+            .map_or_else(|| format!("TD(DANCE_{n})"), |td| format!("TD({})", td.name.to_uppercase())),
         Key::Unknown(s)    => format!("/* TODO: {s} */"),
     }
+}
+
+fn render_c_tap_dances(out: &mut String, keymap: &Keymap) {
+    out.push_str("enum tap_dance_codes {\n");
+    for td in &keymap.tap_dances {
+        let _ = writeln!(out, "    {},", td.name.to_uppercase());
+    }
+    out.push_str("};\n\n");
+
+    out.push_str("tap_dance_action_t tap_dance_actions[] = {\n");
+    for td in &keymap.tap_dances {
+        let action = if td.bindings.len() == 2 {
+            let kc1 = key_to_qmk_str(&td.bindings[0], &[]);
+            let kc2 = key_to_qmk_str(&td.bindings[1], &[]);
+            format!("ACTION_TAP_DANCE_DOUBLE({kc1}, {kc2})")
+        } else {
+            "ACTION_TAP_DANCE_FN_ADVANCED(NULL, NULL, NULL) /* TODO: fill in */".to_string()
+        };
+        let _ = writeln!(out, "    [{}] = {action},", td.name.to_uppercase());
+    }
+    out.push_str("};\n\n");
 }
 
 fn zmk_mmv_to_qmk(dir: &str) -> String {
@@ -206,6 +234,7 @@ mod tests {
             layout: None,
             layers: vec![Layer { name: "base_layer".into(), index: 0, keys }],
             macros: vec![],
+            tap_dances: vec![],
             tri_layer: None,
         }
     }
@@ -329,5 +358,53 @@ mod tests {
         let km = simple_keymap(vec![Key::Kp("WEIRD_BEHAVIOR".into())]);
         let out = render_json(&km);
         assert!(out.contains("WEIRD_BEHAVIOR"));
+    }
+
+    #[test]
+    fn tap_dance_renders_with_name_in_json() {
+        use crate::ir::TapDanceDef;
+        let mut km = simple_keymap(vec![Key::TapDance(0)]);
+        km.tap_dances = vec![TapDanceDef {
+            name: "dance_0".into(),
+            bindings: vec![Key::Kp("LSHFT".into()), Key::Kp("CAPS".into())],
+        }];
+        let out = render_json(&km);
+        assert!(out.contains(r#""TD(DANCE_0)""#));
+    }
+
+    #[test]
+    fn tap_dance_fallback_when_index_out_of_range() {
+        let km = simple_keymap(vec![Key::TapDance(5)]);
+        let out = render_json(&km);
+        assert!(out.contains(r#""TD(DANCE_5)""#));
+    }
+
+    #[test]
+    fn c_tap_dance_block_emitted() {
+        use crate::ir::TapDanceDef;
+        let mut km = simple_keymap(vec![Key::TapDance(0)]);
+        km.tap_dances = vec![TapDanceDef {
+            name: "dance_0".into(),
+            bindings: vec![Key::Kp("LSHFT".into()), Key::Kp("CAPS".into())],
+        }];
+        let out = render_c(&km, None);
+        assert!(out.contains("enum tap_dance_codes"));
+        assert!(out.contains("DANCE_0,"));
+        assert!(out.contains("tap_dance_actions[]"));
+        assert!(out.contains("ACTION_TAP_DANCE_DOUBLE(KC_LSFT, KC_CAPS)"));
+        assert!(out.contains("TD(DANCE_0)"));
+    }
+
+    #[test]
+    fn c_tap_dance_fn_advanced_stub_for_other_counts() {
+        use crate::ir::TapDanceDef;
+        let mut km = simple_keymap(vec![Key::TapDance(0)]);
+        km.tap_dances = vec![TapDanceDef {
+            name: "dance_0".into(),
+            bindings: vec![Key::Kp("A".into()), Key::Kp("B".into()), Key::Kp("C".into())],
+        }];
+        let out = render_c(&km, None);
+        assert!(out.contains("ACTION_TAP_DANCE_FN_ADVANCED"));
+        assert!(out.contains("TODO"));
     }
 }

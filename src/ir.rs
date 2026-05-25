@@ -4,6 +4,7 @@ pub struct Keymap {
     pub layout: Option<String>,
     pub layers: Vec<Layer>,
     pub macros: Vec<MacroDef>,
+    pub tap_dances: Vec<TapDanceDef>,
     pub tri_layer: Option<TriLayer>,
 }
 
@@ -35,7 +36,14 @@ pub enum Key {
     SysReset,
     RgbUg(String),
     Macro(String),
+    TapDance(usize),
     Unknown(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TapDanceDef {
+    pub name: String,
+    pub bindings: Vec<Key>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

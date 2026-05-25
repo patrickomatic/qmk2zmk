@@ -16,6 +16,7 @@ struct QmkJson {
 pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
     let qmk: QmkJson = serde_json::from_str(source)?;
 
+    let tap_dance_map = HashMap::new();
     let layers = qmk
         .layers
         .iter()
@@ -29,7 +30,7 @@ pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
                 index: i,
                 keys: keys
                     .iter()
-                    .map(|k| super::parse_c::parse_key_expr_str(k, &layer_map, &defines, &custom_keycodes))
+                    .map(|k| super::parse_c::parse_key_expr_str(k, &layer_map, &defines, &custom_keycodes, &tap_dance_map))
                     .collect(),
             }
         })
@@ -40,6 +41,7 @@ pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
         layout: qmk.layout,
         layers,
         macros: vec![],
+        tap_dances: vec![],
         tri_layer: None,
     })
 }

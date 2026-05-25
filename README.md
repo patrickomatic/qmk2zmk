@@ -140,7 +140,8 @@ zmk2qmk --list-keyboards
 | `#define LOWER MO(_LOWER)` | resolved automatically |
 | `update_tri_layer_state` | `conditional_layers` block |
 | Custom macros (`ST_MACRO_0`, …) | stub with `// TODO` |
-| `TD(...)`, `LM(...)` | `/* TODO */` comment |
+| `TD(DANCE_0)` with `ACTION_TAP_DANCE_DOUBLE` | `zmk,behavior-tap-dance` in `behaviors {}` |
+| `LM(...)` | `/* TODO */` comment |
 
 ### ZMK → QMK
 
@@ -165,6 +166,7 @@ zmk2qmk --list-keyboards
 | `&bootloader` | `QK_BOOT` |
 | `&sys_reset` | `QK_RBT` |
 | `&rgb_ug RGB_TOG`, … | `RGB_TOG`, … |
+| `zmk,behavior-tap-dance` | `TD(DANCE_N)` with `tap_dance_actions[]` |
 | `&bt BT_SEL …`, `&out OUT_USB` | `/* TODO */` comment |
 | `conditional_layers` block | `update_tri_layer_state` (C only) |
 
@@ -173,7 +175,7 @@ Punctuation and special keys are remapped where the names differ between firmwar
 ## Known gaps
 
 - **Custom macro bodies** — `process_record_user` is not parsed by `qmk2zmk`. Macros get a stub in the `macros {}` block for you to fill in. `zmk2qmk` generates a `process_record_user` stub in C output.
-- **Tap dance** (`TD(...)`) — no ZMK equivalent; emitted as a `/* TODO */` comment.
+- **Tap dance with more than 2 bindings** — `ACTION_TAP_DANCE_DOUBLE` is fully converted; other action types (`ACTION_TAP_DANCE_FN_ADVANCED`, etc.) produce a stub for you to fill in.
 - **Layer-mod** (`LM(...)`) — no ZMK equivalent; emitted as a `/* TODO */` comment.
 - **Bluetooth / output keys** (`&bt`, `&out`) — no QMK equivalent; preserved as `/* TODO */` in QMK output.
 - **Dynamic tapping term keys** (`QK_DYNAMIC_TAPPING_TERM_*`) — no ZMK equivalent; emitted as `/* TODO */` comments.

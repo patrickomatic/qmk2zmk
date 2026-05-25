@@ -28,6 +28,10 @@ use crate::ir::{Key, Keymap, MacroStep, TriLayer};
         render_conditional_layers(&mut out, tri);
     }
 
+    if has_tap_dances(keymap) {
+        render_behaviors(&mut out, keymap);
+    }
+
     if has_macros(keymap) {
         render_macros(&mut out, keymap);
     }
@@ -152,8 +156,33 @@ fn render_key(key: &Key) -> String {
         Key::SysReset     => "&sys_reset".into(),
         Key::RgbUg(a)     => format!("&rgb_ug {a}"),
         Key::Macro(name)  => format!("&{name}"),
+        Key::TapDance(n)  => format!("&td{n}"),
         Key::Unknown(s)   => format!("/* TODO: {s} */"),
     }
+}
+
+fn render_behaviors(out: &mut String, keymap: &Keymap) {
+    out.push_str("    behaviors {\n");
+    for (i, td) in keymap.tap_dances.iter().enumerate() {
+        let _ = writeln!(out, "        td{i}: tap_dance_{i} {{");
+        out.push_str("            compatible = \"zmk,behavior-tap-dance\";\n");
+        out.push_str("            #binding-cells = <0>;\n");
+        out.push_str("            tapping-term-ms = <200>;\n");
+        if td.bindings.is_empty() {
+            out.push_str("            // TODO: fill in tap dance bindings\n");
+            out.push_str("            bindings = <&trans>;\n");
+        } else {
+            let binding_strs: Vec<String> =
+                td.bindings.iter().map(|k| format!("<{}>", render_key(k))).collect();
+            let _ = writeln!(out, "            bindings = {};", binding_strs.join(", "));
+        }
+        out.push_str("        };\n");
+    }
+    out.push_str("    };\n\n");
+}
+
+fn has_tap_dances(keymap: &Keymap) -> bool {
+    !keymap.tap_dances.is_empty()
 }
 
 fn layer_label(name: &str) -> String {
@@ -215,6 +244,7 @@ mod tests {
             layout: None,
             layers: vec![Layer { name: "_BASE".into(), index: 0, keys }],
             macros: vec![],
+            tap_dances: vec![],
             tri_layer: None,
         }
     }
@@ -340,5 +370,43 @@ mod tests {
 
         km.layout = Some("LAYOUT_crkbd_base".into());
         assert_eq!(infer_cols(&km, None), 6);
+    }
+
+    #[test]
+    fn render_key_tap_dance() {
+        assert_eq!(render_key(&Key::TapDance(0)), "&td0");
+        assert_eq!(render_key(&Key::TapDance(3)), "&td3");
+    }
+
+    #[test]
+    fn behaviors_block_emitted_for_tap_dance() {
+        use crate::ir::TapDanceDef;
+        let mut km = simple_keymap(vec![Key::TapDance(0)]);
+        km.tap_dances = vec![TapDanceDef {
+            name: "td0".into(),
+            bindings: vec![Key::Kp("LSHFT".into()), Key::Kp("CAPS".into())],
+        }];
+        let out = render(&km, None);
+        assert!(out.contains("behaviors {"));
+        assert!(out.contains("zmk,behavior-tap-dance"));
+        assert!(out.contains("td0: tap_dance_0"));
+        assert!(out.contains("<&kp LSHFT>, <&kp CAPS>"));
+        assert!(out.contains("&td0"));
+    }
+
+    #[test]
+    fn behaviors_block_stub_for_empty_bindings() {
+        use crate::ir::TapDanceDef;
+        let mut km = simple_keymap(vec![Key::TapDance(0)]);
+        km.tap_dances = vec![TapDanceDef { name: "td0".into(), bindings: vec![] }];
+        let out = render(&km, None);
+        assert!(out.contains("TODO"));
+        assert!(out.contains("bindings = <&trans>"));
+    }
+
+    #[test]
+    fn no_behaviors_block_without_tap_dances() {
+        let km = simple_keymap(vec![Key::Kp("A".into())]);
+        assert!(!render(&km, None).contains("behaviors {"));
     }
 }

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::codes;
 use crate::error::ParseCError;
-use crate::ir::{Key, Keymap, Layer, TriLayer};
+use crate::ir::{Key, Keymap, Layer, TapDanceDef, TriLayer};
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -23,6 +23,13 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
     let custom_keycodes = extract_custom_keycodes(&cleaned);
     let tri_layer = extract_tri_layer(&cleaned, &layer_map);
 
+    let tap_dances = extract_tap_dances(&cleaned, &layer_map, &defines, &custom_keycodes);
+    let tap_dance_map: HashMap<String, usize> = tap_dances
+        .iter()
+        .enumerate()
+        .map(|(i, td)| (td.name.clone(), i))
+        .collect();
+
     let raw_layers = extract_raw_layers(&cleaned)?;
 
     let mut layers: Vec<Layer> = raw_layers
@@ -31,7 +38,7 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
             let index = *layer_map.get(&name).unwrap_or(&0);
             let keys = raw_keys
                 .iter()
-                .map(|k| parse_key_expr_str(k.trim(), &layer_map, &defines, &custom_keycodes))
+                .map(|k| parse_key_expr_str(k.trim(), &layer_map, &defines, &custom_keycodes, &tap_dance_map))
                 .collect();
             Layer { name, index, keys }
         })
@@ -44,6 +51,7 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
         layout: None,
         layers,
         macros: vec![],
+        tap_dances,
         tri_layer,
     })
 }
@@ -57,9 +65,10 @@ pub fn parse_key_expr_str(
     layer_map: &HashMap<String, usize>,
     defines: &HashMap<String, String>,
     custom_keycodes: &HashSet<String>,
+    tap_dance_map: &HashMap<String, usize>,
 ) -> Key {
     let expr = parse_expr(s.trim());
-    expr_to_key(&expr, layer_map, defines, custom_keycodes)
+    expr_to_key(&expr, layer_map, defines, custom_keycodes, tap_dance_map)
 }
 
 // ── Comment stripping ─────────────────────────────────────────────────────────
@@ -307,10 +316,11 @@ fn expr_to_key(
     layer_map: &HashMap<String, usize>,
     defines: &HashMap<String, String>,
     custom_keycodes: &HashSet<String>,
+    tap_dance_map: &HashMap<String, usize>,
 ) -> Key {
     match expr {
-        Expr::Atom(name) => atom_to_key(name, layer_map, defines, custom_keycodes),
-        Expr::Call { name, args } => func_to_key(name, args, layer_map, defines, custom_keycodes),
+        Expr::Atom(name) => atom_to_key(name, layer_map, defines, custom_keycodes, tap_dance_map),
+        Expr::Call { name, args } => func_to_key(name, args, layer_map, defines, custom_keycodes, tap_dance_map),
     }
 }
 
@@ -319,11 +329,12 @@ fn atom_to_key(
     layer_map: &HashMap<String, usize>,
     defines: &HashMap<String, String>,
     custom_keycodes: &HashSet<String>,
+    tap_dance_map: &HashMap<String, usize>,
 ) -> Key {
     // Expand #define aliases first
     if let Some(expansion) = defines.get(name) {
         let expr = parse_expr(expansion);
-        return expr_to_key(&expr, layer_map, defines, custom_keycodes);
+        return expr_to_key(&expr, layer_map, defines, custom_keycodes, tap_dance_map);
     }
 
     match name {
@@ -362,6 +373,7 @@ fn func_to_key(
     layer_map: &HashMap<String, usize>,
     _defines: &HashMap<String, String>,
     _custom_keycodes: &HashSet<String>,
+    tap_dance_map: &HashMap<String, usize>,
 ) -> Key {
     match name {
         "MT" if args.len() == 2 => {
@@ -423,10 +435,13 @@ fn func_to_key(
                 None => Key::Unknown(format!("DF({layer})")),
             }
         }
-        "TD" => Key::Unknown(format!(
-            "TD({}) /* tap dance: no ZMK equivalent */",
-            args.iter().filter_map(|a| a.as_atom()).collect::<Vec<_>>().join(", ")
-        )),
+        "TD" if args.len() == 1 => {
+            let dance_name = args[0].as_atom().unwrap_or("").trim();
+            tap_dance_map
+                .get(dance_name)
+                .copied()
+                .map_or_else(|| Key::Unknown(format!("TD({dance_name})")), Key::TapDance)
+        }
         "LM" => Key::Unknown(format!(
             "LM({}) /* layer-mod: no ZMK equivalent */",
             args.iter().filter_map(|a| a.as_atom()).collect::<Vec<_>>().join(", ")
@@ -493,6 +508,78 @@ fn build_zmk_key_expr(expr: &Expr) -> String {
     }
 }
 
+// ── Tap dance extraction ──────────────────────────────────────────────────────
+
+fn extract_tap_dances(
+    s: &str,
+    layer_map: &HashMap<String, usize>,
+    defines: &HashMap<String, String>,
+    custom_keycodes: &HashSet<String>,
+) -> Vec<TapDanceDef> {
+    let Some(pos) = s.find("tap_dance_actions") else { return vec![] };
+    let after = &s[pos + "tap_dance_actions".len()..];
+    let Some(brace_rel) = after.find('{') else { return vec![] };
+    let Some(close) = find_matching(&after[brace_rel..], '{', '}') else { return vec![] };
+    let body = &after[brace_rel + 1..brace_rel + close];
+
+    let mut tap_dances = Vec::new();
+    let mut search = body;
+
+    while !search.is_empty() {
+        let Some(br) = search.find('[') else { break };
+        let after_open = &search[br + 1..];
+        let Some(cbr) = after_open.find(']') else { break };
+        let name = after_open[..cbr].trim().to_string();
+
+        let after_close = &after_open[cbr + 1..];
+        let Some(eq) = after_close.find('=') else { break };
+        let action_src = after_close[eq + 1..].trim_start();
+
+        let bindings = parse_tap_dance_action(action_src, layer_map, defines, custom_keycodes);
+        tap_dances.push(TapDanceDef { name, bindings });
+
+        // Advance past the closing paren of this action call
+        if let Some(p) = action_src.find('(') {
+            if let Some(cp) = find_matching(&action_src[p..], '(', ')') {
+                search = &action_src[p + cp + 1..];
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    tap_dances
+}
+
+fn parse_tap_dance_action(
+    s: &str,
+    layer_map: &HashMap<String, usize>,
+    defines: &HashMap<String, String>,
+    custom_keycodes: &HashSet<String>,
+) -> Vec<Key> {
+    let s = s.trim();
+    let Some(paren) = s.find('(') else { return vec![] };
+    let action_type = s[..paren].trim();
+    let rest = &s[paren..];
+    let Some(close) = find_matching(rest, '(', ')') else { return vec![] };
+    let args_str = &rest[1..close];
+
+    if action_type == "ACTION_TAP_DANCE_DOUBLE" {
+        let args = split_args(args_str);
+        if args.len() == 2 {
+            let empty_td = HashMap::new();
+            return vec![
+                parse_key_expr_str(args[0].trim(), layer_map, defines, custom_keycodes, &empty_td),
+                parse_key_expr_str(args[1].trim(), layer_map, defines, custom_keycodes, &empty_td),
+            ];
+        }
+    }
+    // ACTION_TAP_DANCE_FN, ACTION_TAP_DANCE_FN_ADVANCED, etc. → stub
+    vec![]
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 /// Find the index of the closing delimiter matching the opening at position 0.
@@ -530,7 +617,7 @@ mod tests {
     }
 
     fn key(s: &str) -> Key {
-        parse_key_expr_str(s, &HashMap::new(), &HashMap::new(), &HashSet::new())
+        parse_key_expr_str(s, &HashMap::new(), &HashMap::new(), &HashSet::new(), &HashMap::new())
     }
 
     fn key_with(
@@ -539,7 +626,7 @@ mod tests {
         defs: &HashMap<String, String>,
         cc: &HashSet<String>,
     ) -> Key {
-        parse_key_expr_str(s, lm, defs, cc)
+        parse_key_expr_str(s, lm, defs, cc, &HashMap::new())
     }
 
     // ── strip_comments ────────────────────────────────────────────────────────
@@ -778,9 +865,63 @@ mod tests {
     }
 
     #[test]
-    fn tap_dance_is_unknown() {
+    fn tap_dance_is_unknown_when_not_in_map() {
+        // TD with no tap-dance map → Unknown
         let k = key("TD(DANCE_0)");
-        assert!(matches!(k, Key::Unknown(s) if s.contains("TD")));
+        assert!(matches!(k, Key::Unknown(s) if s.contains("TD") && s.contains("DANCE_0")));
+    }
+
+    #[test]
+    fn tap_dance_resolved_when_in_map() {
+        let td_map: HashMap<String, usize> =
+            [("DANCE_0".to_string(), 0), ("DANCE_1".to_string(), 1)].into();
+        let k = parse_key_expr_str("TD(DANCE_0)", &HashMap::new(), &HashMap::new(), &HashSet::new(), &td_map);
+        assert!(matches!(k, Key::TapDance(0)));
+        let k2 = parse_key_expr_str("TD(DANCE_1)", &HashMap::new(), &HashMap::new(), &HashSet::new(), &td_map);
+        assert!(matches!(k2, Key::TapDance(1)));
+    }
+
+    #[test]
+    fn extract_tap_dances_double() {
+        let src = r"
+enum layers { _BASE };
+tap_dance_action_t tap_dance_actions[] = {
+    [DANCE_0] = ACTION_TAP_DANCE_DOUBLE(KC_LSFT, KC_CAPS),
+    [DANCE_1] = ACTION_TAP_DANCE_DOUBLE(KC_A, KC_B),
+};
+const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
+    [_BASE] = LAYOUT(TD(DANCE_0), TD(DANCE_1), KC_C),
+};
+";
+        let km = parse(src).unwrap();
+        assert_eq!(km.tap_dances.len(), 2);
+        assert_eq!(km.tap_dances[0].name, "DANCE_0");
+        assert_eq!(km.tap_dances[0].bindings.len(), 2);
+        assert!(matches!(&km.tap_dances[0].bindings[0], Key::Kp(k) if k == "LSHFT"));
+        assert!(matches!(&km.tap_dances[0].bindings[1], Key::Kp(k) if k == "CAPS"));
+        assert_eq!(km.tap_dances[1].name, "DANCE_1");
+        // Keymap cells resolved to TapDance keys
+        assert!(matches!(&km.layers[0].keys[0], Key::TapDance(0)));
+        assert!(matches!(&km.layers[0].keys[1], Key::TapDance(1)));
+        assert!(matches!(&km.layers[0].keys[2], Key::Kp(k) if k == "C"));
+    }
+
+    #[test]
+    fn extract_tap_dances_fn_advanced_is_stub() {
+        let src = r"
+enum layers { _BASE };
+tap_dance_action_t tap_dance_actions[] = {
+    [DANCE_0] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, dance_0_finished, dance_0_reset),
+};
+const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
+    [_BASE] = LAYOUT(TD(DANCE_0)),
+};
+";
+        let km = parse(src).unwrap();
+        assert_eq!(km.tap_dances.len(), 1);
+        assert_eq!(km.tap_dances[0].name, "DANCE_0");
+        assert!(km.tap_dances[0].bindings.is_empty(), "fn_advanced should produce empty bindings");
+        assert!(matches!(&km.layers[0].keys[0], Key::TapDance(0)));
     }
 
     #[test]
