@@ -119,18 +119,13 @@ fn key_to_qmk_str(key: &Key) -> String {
         Key::CapsWord      => "CW_TOGG".into(),
         Key::Bootloader    => "QK_BOOT".into(),
         Key::SysReset      => "QK_RBT".into(),
-        Key::Kp(zmk)       => codes::zmk_key_to_qmk(zmk)
-                                   .map_or_else(|| format!("/* {zmk} */"), Into::into),
+        Key::Kp(zmk)       => codes::zmk_key_expr_to_qmk(zmk),
         Key::Mo(n)         => format!("MO({n})"),
         Key::Tog(n)        => format!("TG({n})"),
-        Key::Lt(n, k)      => {
-            let qk = codes::zmk_key_to_qmk(k).unwrap_or(k.as_str());
-            format!("LT({n},{qk})")
-        }
+        Key::Lt(n, k)      => format!("LT({n},{})", codes::zmk_key_expr_to_qmk(k)),
         Key::Mt(m, k)      => {
             let qm = codes::zmk_mod_to_qmk(m);
-            let qk = codes::zmk_key_to_qmk(k).unwrap_or(k.as_str());
-            format!("MT({qm},{qk})")
+            format!("MT({qm},{})", codes::zmk_key_expr_to_qmk(k))
         }
         Key::RgbUg(a)      => codes::zmk_rgb_to_qmk(a)
                                    .map_or_else(|| format!("/* {a} */"), Into::into),
@@ -242,9 +237,17 @@ mod tests {
     }
 
     #[test]
-    fn unknown_zmk_key_rendered_as_comment() {
-        let km = simple_keymap(vec![Key::Kp("LC(C)".into())]);
+    fn modifier_expr_converted() {
+        let km = simple_keymap(vec![Key::Kp("LC(C)".into()), Key::Kp("LG(LS(LBKT))".into())]);
         let out = render_json(&km);
-        assert!(out.contains("LC(C)"));
+        assert!(out.contains(r#""LCTL(KC_C)""#));
+        assert!(out.contains(r#""LGUI(LSFT(KC_LBRC))""#));
+    }
+
+    #[test]
+    fn truly_unknown_zmk_key_rendered_as_raw() {
+        let km = simple_keymap(vec![Key::Kp("WEIRD_BEHAVIOR".into())]);
+        let out = render_json(&km);
+        assert!(out.contains("WEIRD_BEHAVIOR"));
     }
 }

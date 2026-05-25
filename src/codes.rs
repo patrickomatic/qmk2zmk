@@ -281,6 +281,56 @@ pub fn zmk_mod_to_qmk(zmk_mod: &str) -> &'static str {
     }
 }
 
+/// Convert a ZMK key expression (simple or modifier-wrapped) to a QMK keycode string.
+///
+/// Handles nested modifier prefixes like `LG(LS(LBKT))` → `LGUI(LSFT(KC_LBRC))`.
+/// Falls back to the raw ZMK name for unknown keys.
+#[must_use]
+pub fn zmk_key_expr_to_qmk(zmk: &str) -> String {
+    if let Some(paren) = zmk.find('(') {
+        let prefix = &zmk[..paren];
+        let converted = zmk_mod_prefix_to_qmk_fn(prefix).and_then(|qmk_fn| {
+            extract_paren_inner(zmk, paren)
+                .map(|inner| format!("{qmk_fn}({})", zmk_key_expr_to_qmk(inner)))
+        });
+        if let Some(result) = converted {
+            return result;
+        }
+    }
+    zmk_key_to_qmk(zmk).unwrap_or(zmk).to_string()
+}
+
+fn zmk_mod_prefix_to_qmk_fn(prefix: &str) -> Option<&'static str> {
+    Some(match prefix {
+        "LG" => "LGUI",
+        "RG" => "RGUI",
+        "LS" => "LSFT",
+        "RS" => "RSFT",
+        "LC" => "LCTL",
+        "RC" => "RCTL",
+        "LA" => "LALT",
+        "RA" => "RALT",
+        _ => return None,
+    })
+}
+
+fn extract_paren_inner(s: &str, open: usize) -> Option<&str> {
+    let mut depth = 0usize;
+    for (i, c) in s[open..].char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&s[open + 1..open + i]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Map a ZMK `rgb_ug` action string back to a QMK RGB keycode.
 #[must_use]
 pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
@@ -449,5 +499,30 @@ mod tests {
     fn reverse_unknown_returns_none() {
         assert_eq!(zmk_key_to_qmk("NOT_A_KEY"), None);
         assert_eq!(zmk_key_to_qmk("LC(C)"),     None);
+    }
+
+    #[test]
+    fn key_expr_simple() {
+        assert_eq!(zmk_key_expr_to_qmk("Q"),     "KC_Q");
+        assert_eq!(zmk_key_expr_to_qmk("SPACE"), "KC_SPACE");
+        assert_eq!(zmk_key_expr_to_qmk("LBKT"),  "KC_LBRC");
+    }
+
+    #[test]
+    fn key_expr_single_modifier() {
+        assert_eq!(zmk_key_expr_to_qmk("LC(C)"),    "LCTL(KC_C)");
+        assert_eq!(zmk_key_expr_to_qmk("LG(SPACE)"), "LGUI(KC_SPACE)");
+        assert_eq!(zmk_key_expr_to_qmk("LS(TAB)"),  "LSFT(KC_TAB)");
+    }
+
+    #[test]
+    fn key_expr_nested_modifiers() {
+        assert_eq!(zmk_key_expr_to_qmk("LG(LS(LBKT))"), "LGUI(LSFT(KC_LBRC))");
+        assert_eq!(zmk_key_expr_to_qmk("RG(RS(RBKT))"), "RGUI(RSFT(KC_RBRC))");
+    }
+
+    #[test]
+    fn key_expr_unknown_falls_back_to_raw() {
+        assert_eq!(zmk_key_expr_to_qmk("WEIRD"), "WEIRD");
     }
 }
