@@ -45,19 +45,19 @@ Options:
       --keyboard <KEYBOARD>  Known keyboard name (sets column count; see --list-keyboards)
       --cols <COLS>          Override columns per row in ZMK output
       --list-keyboards       List known keyboards and their column counts, then exit
-  -v, --verbose              Print warnings for unmapped keycodes to stderr
+      --no-warn              Suppress warnings for unmapped keycodes
   -h, --help                 Print help
 ```
 
 ```sh
-# Print to stdout
+# Print to stdout (warnings for unmapped keys go to stderr automatically)
 qmk2zmk keymap.c
 
 # Write to a file
 qmk2zmk keymap.c -o my_keymap.keymap
 
-# Show warnings for any keys that couldn't be mapped
-qmk2zmk keymap.c -v
+# Suppress unmapped key warnings
+qmk2zmk keymap.c --no-warn
 
 # Specify keyboard to set column count in output
 qmk2zmk keymap.c --keyboard planck
@@ -87,7 +87,7 @@ Options:
       --keyboard <KEYBOARD>  Known keyboard name (sets column count; see --list-keyboards)
       --cols <COLS>          Override columns per row in QMK C output
       --list-keyboards       List known keyboards and their column counts, then exit
-  -v, --verbose              Print warnings for unmapped keycodes to stderr
+      --no-warn              Suppress warnings for unmapped keycodes
   -h, --help                 Print help
 ```
 

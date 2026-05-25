@@ -37,9 +37,9 @@ struct Cli {
     #[arg(long)]
     list_keyboards: bool,
 
-    /// Print warnings for unmapped keycodes to stderr
-    #[arg(short, long)]
-    verbose: bool,
+    /// Suppress warnings for unmapped keycodes
+    #[arg(long)]
+    no_warn: bool,
 }
 
 fn main() {
@@ -76,7 +76,7 @@ fn run() -> Result<(), Error> {
         InputFormat::Json => qmk::parse_json::parse(&source).map_err(Error::ParseJson)?,
     };
 
-    if cli.verbose {
+    if !cli.no_warn {
         qmk2zmk::warn_unknowns(&keymap);
     }
 
