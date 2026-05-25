@@ -19,16 +19,22 @@ When adding a new failure mode, add a variant to the appropriate enum rather tha
 
 ```
 src/
-  lib.rs          — public module exports
-  main.rs         — CLI entry point; only place errors are caught
-  error.rs        — Error and ParseCError types
+  lib.rs          — public module exports; report_and_exit shared by both binaries
+  io.rs           — shared read_input / write_output helpers
+  error.rs        — Error, ParseCError, ParseZmkError types
   ir.rs           — Internal representation (Keymap, Layer, Key, …)
-  codes.rs        — QMK → ZMK key/modifier/RGB mapping tables
+  codes.rs        — QMK ↔ ZMK key/modifier/RGB mapping tables (both directions)
   parser/
     qmk_c.rs      — Parse keymap.c
     qmk_json.rs   — Parse QMK Configurator JSON
+    zmk.rs        — Parse ZMK .keymap DTS overlay
   zmk/
     mod.rs        — Render ZMK .keymap output
+  qmk/
+    mod.rs        — Render QMK JSON and C output
+  bin/
+    qmk2zmk.rs   — CLI entry point for qmk2zmk
+    zmk2qmk.rs   — CLI entry point for zmk2qmk
 tests/
   integration.rs  — End-to-end tests against the example keymap
 examples/
