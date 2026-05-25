@@ -154,14 +154,16 @@ fn extract_custom_keycodes(s: &str) -> HashSet<String> {
     let mut codes = HashSet::new();
     if let Some(pos) = s.find("enum custom_keycodes") {
         let after = &s[pos..];
-        if let Some(brace) = after.find('{') {
-            if let Some(close) = find_matching(&after[brace..], '{', '}') {
-                let body = &after[brace + 1..brace + close];
-                for entry in body.split(',') {
-                    let name = entry.split('=').next().unwrap_or("").trim().to_string();
-                    if !name.is_empty() {
-                        codes.insert(name);
-                    }
+        let parsed = after.find('{').and_then(|brace| {
+            let close = find_matching(&after[brace..], '{', '}')?;
+            Some((brace, close))
+        });
+        if let Some((brace, close)) = parsed {
+            let body = &after[brace + 1..brace + close];
+            for entry in body.split(',') {
+                let name = entry.split('=').next().unwrap_or("").trim().to_string();
+                if !name.is_empty() {
+                    codes.insert(name);
                 }
             }
         }

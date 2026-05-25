@@ -67,15 +67,14 @@ fn render_macros(out: &mut String, keymap: &Keymap) {
     let mut seen: HashSet<String> = HashSet::new();
     for layer in &keymap.layers {
         for key in &layer.keys {
-            if let Key::Macro(name) = key {
-                if !defined.contains(name.as_str()) && seen.insert(name.clone()) {
-                    let _ = writeln!(out, "        {name}: {name} {{");
-                    out.push_str("            compatible = \"zmk,behavior-macro\";\n");
-                    out.push_str("            #binding-cells = <0>;\n");
-                    out.push_str("            // TODO: fill in macro steps\n");
-                    out.push_str("            bindings = <&none>;\n");
-                    out.push_str("        };\n");
-                }
+            let Key::Macro(name) = key else { continue };
+            if !defined.contains(name.as_str()) && seen.insert(name.clone()) {
+                let _ = writeln!(out, "        {name}: {name} {{");
+                out.push_str("            compatible = \"zmk,behavior-macro\";\n");
+                out.push_str("            #binding-cells = <0>;\n");
+                out.push_str("            // TODO: fill in macro steps\n");
+                out.push_str("            bindings = <&none>;\n");
+                out.push_str("        };\n");
             }
         }
     }
@@ -160,10 +159,8 @@ fn infer_cols(keymap: &Keymap) -> usize {
     }
     // Guess from key count: try 12, then 10, then 6
     for &cols in &[12usize, 10, 6] {
-        if let Some(layer) = keymap.layers.first() {
-            if layer.keys.len() % cols == 0 {
-                return cols;
-            }
+        if keymap.layers.first().is_some_and(|l| l.keys.len() % cols == 0) {
+            return cols;
         }
     }
     12
