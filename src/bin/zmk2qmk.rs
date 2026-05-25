@@ -2,7 +2,7 @@ use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
 use qmk2zmk::error::Error;
-use qmk2zmk::{io, parser, qmk};
+use qmk2zmk::{io, qmk, zmk};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum OutputFormat {
@@ -40,7 +40,7 @@ fn run() -> Result<(), Error> {
 
     let source = io::read_input(&cli.input)?;
 
-    let mut keymap = parser::zmk::parse(&source).map_err(Error::ParseZmk)?;
+    let mut keymap = zmk::parse::parse(&source).map_err(Error::ParseZmk)?;
     if keymap.layout.is_none() {
         keymap.layout = Some(cli.layout);
     }

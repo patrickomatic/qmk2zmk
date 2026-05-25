@@ -1,5 +1,5 @@
 use qmk2zmk::ir::Key;
-use qmk2zmk::parser::qmk_c;
+use qmk2zmk::qmk::parse_c as qmk_c;
 use qmk2zmk::zmk;
 
 const KEYMAP_C: &str =
@@ -7,7 +7,7 @@ const KEYMAP_C: &str =
 
 #[test]
 fn parses_four_layers() {
-    let km = qmk2zmk::parser::qmk_c::parse(KEYMAP_C).unwrap();
+    let km = qmk2zmk::qmk::parse_c::parse(KEYMAP_C).unwrap();
     assert_eq!(km.layers.len(), 4);
 }
 

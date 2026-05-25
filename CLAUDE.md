@@ -24,14 +24,13 @@ src/
   error.rs        — Error, ParseCError, ParseZmkError types
   ir.rs           — Internal representation (Keymap, Layer, Key, …)
   codes.rs        — QMK ↔ ZMK key/modifier/RGB mapping tables (both directions)
-  parser/
-    qmk_c.rs      — Parse keymap.c
-    qmk_json.rs   — Parse QMK Configurator JSON
-    zmk.rs        — Parse ZMK .keymap DTS overlay
-  zmk/
-    mod.rs        — Render ZMK .keymap output
   qmk/
     mod.rs        — Render QMK JSON and C output
+    parse_c.rs    — Parse keymap.c
+    parse_json.rs — Parse QMK Configurator JSON
+  zmk/
+    mod.rs        — Render ZMK .keymap output
+    parse.rs      — Parse ZMK .keymap DTS overlay
   bin/
     qmk2zmk.rs   — CLI entry point for qmk2zmk
     zmk2qmk.rs   — CLI entry point for zmk2qmk

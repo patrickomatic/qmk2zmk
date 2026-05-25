@@ -1,3 +1,6 @@
+pub mod parse_c;
+pub mod parse_json;
+
 use std::fmt::Write as _;
 
 use crate::codes;

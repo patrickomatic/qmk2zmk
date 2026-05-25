@@ -2,7 +2,7 @@ use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
 use qmk2zmk::error::Error;
-use qmk2zmk::{io, parser, zmk};
+use qmk2zmk::{io, qmk, zmk};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum InputFormat {
@@ -48,8 +48,8 @@ fn run() -> Result<(), Error> {
     let source = io::read_input(&cli.input)?;
 
     let keymap = match format {
-        InputFormat::C    => parser::qmk_c::parse(&source).map_err(Error::ParseC)?,
-        InputFormat::Json => parser::qmk_json::parse(&source).map_err(Error::ParseJson)?,
+        InputFormat::C    => qmk::parse_c::parse(&source).map_err(Error::ParseC)?,
+        InputFormat::Json => qmk::parse_json::parse(&source).map_err(Error::ParseJson)?,
     };
 
     let output = zmk::render(&keymap);

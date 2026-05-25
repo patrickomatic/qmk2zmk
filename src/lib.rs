@@ -2,7 +2,6 @@ pub mod codes;
 pub mod error;
 pub mod io;
 pub mod ir;
-pub mod parser;
 pub mod qmk;
 pub mod zmk;
 

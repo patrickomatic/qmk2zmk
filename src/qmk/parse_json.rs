@@ -29,7 +29,7 @@ pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
                 index: i,
                 keys: keys
                     .iter()
-                    .map(|k| super::qmk_c::parse_key_expr_str(k, &layer_map, &defines, &custom_keycodes))
+                    .map(|k| super::parse_c::parse_key_expr_str(k, &layer_map, &defines, &custom_keycodes))
                     .collect(),
             }
         })
