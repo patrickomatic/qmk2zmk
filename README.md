@@ -6,14 +6,22 @@ Reads a `keymap.c` (QMK C source) or `keymap.json` (QMK Configurator JSON) and e
 
 ## Installation
 
+**macOS / Linux**
+
 ```sh
-cargo install --path .
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/patrickomatic/qmk2zmk/releases/latest/download/qmk2zmk-installer.sh | sh
 ```
 
-Or run directly without installing:
+**Windows (PowerShell)**
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/patrickomatic/qmk2zmk/releases/latest/download/qmk2zmk-installer.ps1 | iex"
+```
+
+**Via cargo**
 
 ```sh
-cargo run -- <input>
+cargo install qmk2zmk
 ```
 
 ## Usage
@@ -94,8 +102,4 @@ The generated file is a DTS overlay:
 
 ## Example
 
-The `examples/zsa-qmk/` directory contains a real ZSA Planck EZ Glow export (Colemak-DH with home-row mods) used as the reference test case:
-
-```sh
-cargo run -- examples/zsa-qmk/zsa_planck_ez_glow_planck_source/keymap.c
-```
+The `examples/zsa-qmk/` directory contains a real ZSA Planck EZ Glow export (Colemak-DH with home-row mods) used as the reference test case.
