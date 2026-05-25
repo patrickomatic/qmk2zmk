@@ -155,6 +155,149 @@
     })
 }
 
+/// Map a ZMK key name back to a QMK keycode string (with `KC_` prefix).
+#[must_use]
+pub fn zmk_key_to_qmk(zmk: &str) -> Option<&'static str> {
+    Some(match zmk {
+        // Letters
+        "A" => "KC_A", "B" => "KC_B", "C" => "KC_C", "D" => "KC_D", "E" => "KC_E",
+        "F" => "KC_F", "G" => "KC_G", "H" => "KC_H", "I" => "KC_I", "J" => "KC_J",
+        "K" => "KC_K", "L" => "KC_L", "M" => "KC_M", "N" => "KC_N", "O" => "KC_O",
+        "P" => "KC_P", "Q" => "KC_Q", "R" => "KC_R", "S" => "KC_S", "T" => "KC_T",
+        "U" => "KC_U", "V" => "KC_V", "W" => "KC_W", "X" => "KC_X", "Y" => "KC_Y",
+        "Z" => "KC_Z",
+        // Numbers
+        "N0" => "KC_0", "N1" => "KC_1", "N2" => "KC_2", "N3" => "KC_3", "N4" => "KC_4",
+        "N5" => "KC_5", "N6" => "KC_6", "N7" => "KC_7", "N8" => "KC_8", "N9" => "KC_9",
+        // Function keys
+        "F1"  => "KC_F1",  "F2"  => "KC_F2",  "F3"  => "KC_F3",  "F4"  => "KC_F4",
+        "F5"  => "KC_F5",  "F6"  => "KC_F6",  "F7"  => "KC_F7",  "F8"  => "KC_F8",
+        "F9"  => "KC_F9",  "F10" => "KC_F10", "F11" => "KC_F11", "F12" => "KC_F12",
+        "F13" => "KC_F13", "F14" => "KC_F14", "F15" => "KC_F15", "F16" => "KC_F16",
+        "F17" => "KC_F17", "F18" => "KC_F18", "F19" => "KC_F19", "F20" => "KC_F20",
+        "F21" => "KC_F21", "F22" => "KC_F22", "F23" => "KC_F23", "F24" => "KC_F24",
+        // Common
+        "TAB"   => "KC_TAB",
+        "RET"   => "KC_ENTER",
+        "ESC"   => "KC_ESCAPE",
+        "BSPC"  => "KC_BSPC",
+        "DEL"   => "KC_DEL",
+        "INS"   => "KC_INS",
+        "SPACE" => "KC_SPACE",
+        "CAPS"  => "KC_CAPS",
+        // Punctuation
+        "MINUS" => "KC_MINUS",
+        "EQUAL" => "KC_EQUAL",
+        "LBKT"  => "KC_LBRC",
+        "RBKT"  => "KC_RBRC",
+        "BSLH"  => "KC_BSLS",
+        "SEMI"  => "KC_SCLN",
+        "SQT"   => "KC_QUOTE",
+        "GRAVE" => "KC_GRAVE",
+        "COMMA" => "KC_COMMA",
+        "DOT"   => "KC_DOT",
+        "FSLH"  => "KC_SLASH",
+        // Shifted symbols
+        "EXCL"  => "KC_EXLM",
+        "AT"    => "KC_AT",
+        "HASH"  => "KC_HASH",
+        "DLLR"  => "KC_DLR",
+        "PRCNT" => "KC_PERC",
+        "CARET" => "KC_CIRC",
+        "AMPS"  => "KC_AMPR",
+        "STAR"  => "KC_ASTR",
+        "LPAR"  => "KC_LPRN",
+        "RPAR"  => "KC_RPRN",
+        "UNDER" => "KC_UNDS",
+        "PLUS"  => "KC_PLUS",
+        "LBRC"  => "KC_LCBR",
+        "RBRC"  => "KC_RCBR",
+        "PIPE"  => "KC_PIPE",
+        "TILDE" => "KC_TILD",
+        "LT"    => "KC_LT",
+        "GT"    => "KC_GT",
+        "DQT"   => "KC_DQUO",
+        "COLON" => "KC_COLN",
+        "QMARK" => "KC_QUES",
+        // Navigation
+        "LEFT"  => "KC_LEFT",
+        "RIGHT" => "KC_RIGHT",
+        "UP"    => "KC_UP",
+        "DOWN"  => "KC_DOWN",
+        "PG_UP" => "KC_PGUP",
+        "PG_DN" => "KC_PGDN",
+        "HOME"  => "KC_HOME",
+        "END"   => "KC_END",
+        // Modifiers
+        "LCTRL" => "KC_LCTL",
+        "RCTRL" => "KC_RCTL",
+        "LSHFT" => "KC_LSFT",
+        "RSHFT" => "KC_RSFT",
+        "LALT"  => "KC_LALT",
+        "RALT"  => "KC_RALT",
+        "LGUI"  => "KC_LGUI",
+        "RGUI"  => "KC_RGUI",
+        // Media
+        "C_VOL_UP" => "KC_VOLU",
+        "C_VOL_DN" => "KC_VOLD",
+        "C_MUTE"   => "KC_MUTE",
+        "C_BRI_UP" => "KC_BRIU",
+        "C_BRI_DN" => "KC_BRID",
+        "C_PP"     => "KC_MPLY",
+        "C_NEXT"   => "KC_MNXT",
+        "C_PREV"   => "KC_MPRV",
+        // Keypad
+        "KP_N0" => "KC_KP_0", "KP_N1" => "KC_KP_1", "KP_N2" => "KC_KP_2",
+        "KP_N3" => "KC_KP_3", "KP_N4" => "KC_KP_4", "KP_N5" => "KC_KP_5",
+        "KP_N6" => "KC_KP_6", "KP_N7" => "KC_KP_7", "KP_N8" => "KC_KP_8",
+        "KP_N9" => "KC_KP_9",
+        "KP_SLASH"    => "KC_KP_SLASH",
+        "KP_MULTIPLY" => "KC_KP_ASTERISK",
+        "KP_MINUS"    => "KC_KP_MINUS",
+        "KP_PLUS"     => "KC_KP_PLUS",
+        "KP_ENTER"    => "KC_KP_ENTER",
+        "KP_DOT"      => "KC_KP_DOT",
+        // Misc
+        "PSCRN"       => "KC_PSCR",
+        "SLCK"        => "KC_SCRL",
+        "PAUSE_BREAK" => "KC_PAUS",
+        "K_APP"       => "KC_APP",
+        _ => return None,
+    })
+}
+
+/// Map a ZMK modifier name to a QMK `MOD_*` constant.
+#[must_use]
+pub fn zmk_mod_to_qmk(zmk_mod: &str) -> &'static str {
+    match zmk_mod.trim() {
+        "LALT"  => "MOD_LALT",
+        "RALT"  => "MOD_RALT",
+        "RCTRL" => "MOD_RCTL",
+        "LSHFT" => "MOD_LSFT",
+        "RSHFT" => "MOD_RSFT",
+        "LGUI"  => "MOD_LGUI",
+        "RGUI"  => "MOD_RGUI",
+        _       => "MOD_LCTL",
+    }
+}
+
+/// Map a ZMK `rgb_ug` action string back to a QMK RGB keycode.
+#[must_use]
+pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
+    Some(match zmk {
+        "RGB_TOG" => "RGB_TOG",
+        "RGB_HUI" => "RGB_HUI",
+        "RGB_HUD" => "RGB_HUD",
+        "RGB_SAI" => "RGB_SAI",
+        "RGB_SAD" => "RGB_SAD",
+        "RGB_VAI" => "RGB_VAI",
+        "RGB_VAD" => "RGB_VAD",
+        "RGB_EFF" => "RGB_MODE_FORWARD",
+        "RGB_EFR" => "RGB_MODE_REVERSE",
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,5 +397,57 @@ mod tests {
         assert_eq!(qmk_rgb_to_zmk("RGB_MOD"),          Some("RGB_EFF"));
         assert_eq!(qmk_rgb_to_zmk("RGB_RMOD"),         Some("RGB_EFR"));
         assert_eq!(qmk_rgb_to_zmk("NOT_RGB"),          None);
+    }
+
+    #[test]
+    fn reverse_letters() {
+        assert_eq!(zmk_key_to_qmk("A"), Some("KC_A"));
+        assert_eq!(zmk_key_to_qmk("Z"), Some("KC_Z"));
+    }
+
+    #[test]
+    fn reverse_numbers_strip_n_prefix() {
+        assert_eq!(zmk_key_to_qmk("N0"), Some("KC_0"));
+        assert_eq!(zmk_key_to_qmk("N9"), Some("KC_9"));
+    }
+
+    #[test]
+    fn reverse_punctuation() {
+        assert_eq!(zmk_key_to_qmk("SEMI"),  Some("KC_SCLN"));
+        assert_eq!(zmk_key_to_qmk("SQT"),   Some("KC_QUOTE"));
+        assert_eq!(zmk_key_to_qmk("LBKT"),  Some("KC_LBRC"));
+        assert_eq!(zmk_key_to_qmk("RBKT"),  Some("KC_RBRC"));
+        assert_eq!(zmk_key_to_qmk("BSLH"),  Some("KC_BSLS"));
+        assert_eq!(zmk_key_to_qmk("RET"),   Some("KC_ENTER"));
+        assert_eq!(zmk_key_to_qmk("FSLH"),  Some("KC_SLASH"));
+    }
+
+    #[test]
+    fn reverse_media() {
+        assert_eq!(zmk_key_to_qmk("C_VOL_UP"), Some("KC_VOLU"));
+        assert_eq!(zmk_key_to_qmk("C_VOL_DN"), Some("KC_VOLD"));
+        assert_eq!(zmk_key_to_qmk("C_MUTE"),   Some("KC_MUTE"));
+    }
+
+    #[test]
+    fn reverse_mod_constants() {
+        assert_eq!(zmk_mod_to_qmk("LALT"),  "MOD_LALT");
+        assert_eq!(zmk_mod_to_qmk("LCTRL"), "MOD_LCTL");
+        assert_eq!(zmk_mod_to_qmk("LSHFT"), "MOD_LSFT");
+        assert_eq!(zmk_mod_to_qmk("LGUI"),  "MOD_LGUI");
+    }
+
+    #[test]
+    fn reverse_rgb() {
+        assert_eq!(zmk_rgb_to_qmk("RGB_TOG"), Some("RGB_TOG"));
+        assert_eq!(zmk_rgb_to_qmk("RGB_EFF"), Some("RGB_MODE_FORWARD"));
+        assert_eq!(zmk_rgb_to_qmk("RGB_EFR"), Some("RGB_MODE_REVERSE"));
+        assert_eq!(zmk_rgb_to_qmk("UNKNOWN"), None);
+    }
+
+    #[test]
+    fn reverse_unknown_returns_none() {
+        assert_eq!(zmk_key_to_qmk("NOT_A_KEY"), None);
+        assert_eq!(zmk_key_to_qmk("LC(C)"),     None);
     }
 }

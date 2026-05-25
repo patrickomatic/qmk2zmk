@@ -1,0 +1,377 @@
+use std::collections::HashSet;
+
+use crate::error::ParseZmkError;
+use crate::ir::{Key, Keymap, Layer, MacroDef, MacroStep, TriLayer};
+
+/// Parse a ZMK `.keymap` DTS overlay into the internal `Keymap` IR.
+///
+/// # Errors
+/// Returns [`ParseZmkError::NoKeymapBlock`] if no `keymap {}` block is found.
+/// Returns [`ParseZmkError::UnclosedBlock`] if a block brace is never closed.
+pub fn parse(source: &str) -> Result<Keymap, ParseZmkError> {
+    let s = strip_comments(source);
+    let tri_layer = extract_tri_layer(&s);
+    let macros = extract_macros(&s);
+    let macro_names: HashSet<&str> = macros.iter().map(|m| m.name.as_str()).collect();
+    let keymap_body = block_content(&s, "keymap").ok_or(ParseZmkError::NoKeymapBlock)?;
+    let layers = extract_layers(keymap_body, &macro_names)?;
+    Ok(Keymap { keyboard: None, layout: None, layers, macros, tri_layer })
+}
+
+fn strip_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '/' {
+            if chars.peek() == Some(&'/') {
+                for c2 in chars.by_ref() {
+                    if c2 == '\n' { out.push('\n'); break; }
+                }
+            } else if chars.peek() == Some(&'*') {
+                chars.next();
+                while let Some(c2) = chars.next() {
+                    if c2 == '*' && chars.peek() == Some(&'/') {
+                        chars.next();
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Return the content between braces for the first `name { ... }` block found.
+fn block_content<'a>(s: &'a str, name: &str) -> Option<&'a str> {
+    let nlen = name.len();
+    let mut pos = 0;
+    while let Some(rel) = s[pos..].find(name) {
+        let found = pos + rel;
+        let after_name = found + nlen;
+        pos = after_name;
+
+        let prev_ok = found == 0
+            || s[..found].chars().last().is_none_or(|c| !c.is_alphanumeric() && c != '_');
+        let next_ok = s[after_name..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_');
+        if !prev_ok || !next_ok {
+            continue;
+        }
+
+        let after = &s[after_name..];
+        let trimmed = after.trim_start();
+        if !trimmed.starts_with('{') {
+            continue;
+        }
+
+        let ws = after.len() - trimmed.len();
+        let brace_start = after_name + ws;
+        if let Some(close) = find_matching(&s[brace_start..], '{', '}') {
+            return Some(&s[brace_start + 1..brace_start + close]);
+        }
+    }
+    None
+}
+
+fn find_matching(s: &str, open: char, close: char) -> Option<usize> {
+    let mut depth = 0usize;
+    for (i, c) in s.char_indices() {
+        if c == open {
+            depth += 1;
+        } else if c == close {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+fn extract_tri_layer(s: &str) -> Option<TriLayer> {
+    let content = block_content(s, "conditional_layers")?;
+
+    let if_pos = content.find("if-layers")?;
+    let after_if = &content[if_pos..];
+    let open = after_if.find('<')?;
+    let close = after_if[open..].find('>')?;
+    let nums: Vec<usize> = after_if[open + 1..open + close]
+        .split_whitespace()
+        .filter_map(|n| n.parse().ok())
+        .collect();
+    if nums.len() < 2 {
+        return None;
+    }
+
+    let then_pos = content.find("then-layer")?;
+    let after_then = &content[then_pos..];
+    let open2 = after_then.find('<')?;
+    let close2 = after_then[open2..].find('>')?;
+    let tri: usize = after_then[open2 + 1..open2 + close2].trim().parse().ok()?;
+
+    Some(TriLayer { lower: nums[0], upper: nums[1], tri })
+}
+
+fn extract_macros(s: &str) -> Vec<MacroDef> {
+    let Some(content) = block_content(s, "macros") else { return vec![] };
+    let mut macros = Vec::new();
+    let mut pos = 0;
+    while let Some(brace_rel) = content[pos..].find('{') {
+        let brace_pos = pos + brace_rel;
+        let name = identifier_before(content, brace_pos);
+        let Some(close) = find_matching(&content[brace_pos..], '{', '}') else { break };
+        let block = &content[brace_pos + 1..brace_pos + close];
+        pos = brace_pos + close + 1;
+        if name.is_empty() {
+            continue;
+        }
+        let steps = parse_macro_steps(bindings_str(block).unwrap_or(""));
+        macros.push(MacroDef { name: name.to_string(), steps });
+    }
+    macros
+}
+
+fn parse_macro_steps(s: &str) -> Vec<MacroStep> {
+    let mut steps = Vec::new();
+    for chunk in s.split('&').skip(1) {
+        let mut tokens = chunk.split_whitespace();
+        match tokens.next() {
+            Some("kp") => {
+                if let Some(k) = tokens.next() {
+                    steps.push(MacroStep::Tap(k.to_string()));
+                }
+            }
+            Some("macro_wait_time") => {
+                if let Some(ms) = tokens.next().and_then(|s| s.parse().ok()) {
+                    steps.push(MacroStep::Wait(ms));
+                }
+            }
+            _ => {}
+        }
+    }
+    steps
+}
+
+fn extract_layers(s: &str, macro_names: &HashSet<&str>) -> Result<Vec<Layer>, ParseZmkError> {
+    let mut layers = Vec::new();
+    let mut pos = 0;
+    while let Some(brace_rel) = s[pos..].find('{') {
+        let brace_pos = pos + brace_rel;
+        let name = identifier_before(s, brace_pos);
+        let Some(close) = find_matching(&s[brace_pos..], '{', '}') else {
+            return Err(ParseZmkError::UnclosedBlock {
+                context: if name.is_empty() { "keymap".into() } else { name.to_string() },
+            });
+        };
+        let block = &s[brace_pos + 1..brace_pos + close];
+        pos = brace_pos + close + 1;
+        if !block.contains("bindings") {
+            continue;
+        }
+        let keys = parse_binding_list(bindings_str(block).unwrap_or(""), macro_names);
+        let idx = layers.len();
+        layers.push(Layer {
+            name: if name.is_empty() { format!("layer{idx}") } else { name.to_string() },
+            index: idx,
+            keys,
+        });
+    }
+    Ok(layers)
+}
+
+fn bindings_str(block: &str) -> Option<&str> {
+    let start = block.find("bindings")?;
+    let after = &block[start + "bindings".len()..];
+    let open = after.find('<')?;
+    let inner = &after[open + 1..];
+    let close = inner.find('>')?;
+    Some(&inner[..close])
+}
+
+fn parse_binding_list(s: &str, macro_names: &HashSet<&str>) -> Vec<Key> {
+    s.split('&')
+        .skip(1)
+        .filter_map(|chunk| {
+            let tokens: Vec<&str> = chunk.split_whitespace().collect();
+            if tokens.is_empty() { None } else { Some(binding_to_key(&tokens, macro_names)) }
+        })
+        .collect()
+}
+
+fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
+    match tokens[0] {
+        "kp" => tokens.get(1).map_or(
+            Key::Unknown("kp".into()),
+            |k| Key::Kp((*k).to_string()),
+        ),
+        "mo" => tokens.get(1)
+            .and_then(|n| n.parse().ok())
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Mo),
+        "lt" => {
+            if let (Some(&n_str), Some(&k)) = (tokens.get(1), tokens.get(2)) {
+                n_str.parse::<usize>().map_or_else(
+                    |_| Key::Unknown(tokens.join(" ")),
+                    |n| Key::Lt(n, k.to_string()),
+                )
+            } else {
+                Key::Unknown(tokens.join(" "))
+            }
+        }
+        "mt" => {
+            if let (Some(&m), Some(&k)) = (tokens.get(1), tokens.get(2)) {
+                Key::Mt(m.to_string(), k.to_string())
+            } else {
+                Key::Unknown(tokens.join(" "))
+            }
+        }
+        "tog" => tokens.get(1)
+            .and_then(|n| n.parse().ok())
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Tog),
+        "trans"      => Key::Trans,
+        "none"       => Key::None,
+        "caps_word"  => Key::CapsWord,
+        "bootloader" => Key::Bootloader,
+        "sys_reset"  => Key::SysReset,
+        "rgb_ug" => tokens.get(1).map_or(
+            Key::Unknown("rgb_ug".into()),
+            |a| Key::RgbUg((*a).to_string()),
+        ),
+        name if macro_names.contains(name) => Key::Macro(name.to_string()),
+        name => Key::Unknown(format!("&{name}")),
+    }
+}
+
+/// Extract the identifier immediately before position `brace_pos` in `s`.
+fn identifier_before(s: &str, brace_pos: usize) -> &str {
+    let before = s[..brace_pos].trim_end();
+    if before.is_empty() {
+        return "";
+    }
+    let end = before.len();
+    let start = before
+        .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+        .map_or(0, |i| i + 1);
+    &before[start..end]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SIMPLE_KEYMAP: &str = r#"
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <
+                &kp Q &kp W &trans &none &mo 1
+            >;
+        };
+        lower_layer {
+            bindings = <&kp A &lt 1 SPACE &mt LSHFT Z>;
+        };
+    };
+};"#;
+
+    #[test]
+    fn parses_layer_count() {
+        let km = parse(SIMPLE_KEYMAP).unwrap();
+        assert_eq!(km.layers.len(), 2);
+    }
+
+    #[test]
+    fn parses_layer_names() {
+        let km = parse(SIMPLE_KEYMAP).unwrap();
+        assert_eq!(km.layers[0].name, "base_layer");
+        assert_eq!(km.layers[1].name, "lower_layer");
+    }
+
+    #[test]
+    fn parses_basic_keys() {
+        let km = parse(SIMPLE_KEYMAP).unwrap();
+        let keys = &km.layers[0].keys;
+        assert!(matches!(&keys[0], Key::Kp(k) if k == "Q"));
+        assert!(matches!(&keys[2], Key::Trans));
+        assert!(matches!(&keys[3], Key::None));
+        assert!(matches!(&keys[4], Key::Mo(1)));
+    }
+
+    #[test]
+    fn parses_behaviors() {
+        let km = parse(SIMPLE_KEYMAP).unwrap();
+        let keys = &km.layers[1].keys;
+        assert!(matches!(&keys[1], Key::Lt(1, k) if k == "SPACE"));
+        assert!(matches!(&keys[2], Key::Mt(m, k) if m == "LSHFT" && k == "Z"));
+    }
+
+    #[test]
+    fn missing_keymap_block_is_error() {
+        let err = parse("/ { };").unwrap_err();
+        assert_eq!(err, ParseZmkError::NoKeymapBlock);
+    }
+
+    #[test]
+    fn strips_line_comments() {
+        let src = r#"
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        // this is a comment
+        base_layer {
+            bindings = <&kp A>; // trailing comment
+        };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        assert_eq!(km.layers.len(), 1);
+        assert!(matches!(&km.layers[0].keys[0], Key::Kp(k) if k == "A"));
+    }
+
+    #[test]
+    fn parses_conditional_layers() {
+        let src = r#"
+/ {
+    conditional_layers {
+        compatible = "zmk,conditional-layers";
+        tri_layer {
+            if-layers = <1 2>;
+            then-layer = <3>;
+        };
+    };
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer { bindings = <&trans>; };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        let tri = km.tri_layer.unwrap();
+        assert_eq!(tri.lower, 1);
+        assert_eq!(tri.upper, 2);
+        assert_eq!(tri.tri, 3);
+    }
+
+    #[test]
+    fn parses_macro_stubs() {
+        let src = r#"
+/ {
+    macros {
+        MY_MACRO: MY_MACRO {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            bindings = <&none>;
+        };
+    };
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer { bindings = <&MY_MACRO>; };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        assert_eq!(km.macros.len(), 1);
+        assert_eq!(km.macros[0].name, "MY_MACRO");
+        assert!(matches!(&km.layers[0].keys[0], Key::Macro(n) if n == "MY_MACRO"));
+    }
+}

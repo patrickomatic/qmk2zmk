@@ -8,6 +8,7 @@ pub enum Error {
     WriteFile { path: PathBuf, source: std::io::Error },
     ParseC(ParseCError),
     ParseJson(serde_json::Error),
+    ParseZmk(ParseZmkError),
 }
 
 impl fmt::Display for Error {
@@ -17,6 +18,7 @@ impl fmt::Display for Error {
             Error::WriteFile { path, .. } => write!(f, "cannot write '{}'", path.display()),
             Error::ParseC(e) => write!(f, "QMK C keymap parse failed: {e}"),
             Error::ParseJson(e) => write!(f, "QMK JSON keymap parse failed: {e}"),
+            Error::ParseZmk(e) => write!(f, "ZMK keymap parse failed: {e}"),
         }
     }
 }
@@ -27,6 +29,7 @@ impl std::error::Error for Error {
             Error::ReadFile { source, .. } | Error::WriteFile { source, .. } => Some(source),
             Error::ParseC(e) => Some(e),
             Error::ParseJson(e) => Some(e),
+            Error::ParseZmk(e) => Some(e),
         }
     }
 }
@@ -40,6 +43,12 @@ impl From<ParseCError> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::ParseJson(e)
+    }
+}
+
+impl From<ParseZmkError> for Error {
+    fn from(e: ParseZmkError) -> Self {
+        Error::ParseZmk(e)
     }
 }
 
@@ -77,3 +86,23 @@ impl fmt::Display for ParseCError {
 }
 
 impl std::error::Error for ParseCError {}
+
+/// Structured errors from the ZMK keymap parser.
+#[derive(Debug, PartialEq)]
+pub enum ParseZmkError {
+    NoKeymapBlock,
+    UnclosedBlock { context: String },
+}
+
+impl fmt::Display for ParseZmkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseZmkError::NoKeymapBlock =>
+                write!(f, "no keymap {{ }} block found — is this a ZMK .keymap file?"),
+            ParseZmkError::UnclosedBlock { context } =>
+                write!(f, "unclosed block in '{context}'"),
+        }
+    }
+}
+
+impl std::error::Error for ParseZmkError {}

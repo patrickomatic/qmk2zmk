@@ -2,8 +2,7 @@ use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
 use qmk2zmk::error::Error;
-use qmk2zmk::parser;
-use qmk2zmk::zmk;
+use qmk2zmk::{io, parser, zmk};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum InputFormat {
@@ -27,14 +26,8 @@ struct Cli {
 }
 
 fn main() {
-    if let Err(e) = run() {
-        eprintln!("error: {e}");
-        let mut src = std::error::Error::source(&e);
-        while let Some(cause) = src {
-            eprintln!("  caused by: {cause}");
-            src = cause.source();
-        }
-        std::process::exit(1);
+    if let Err(ref e) = run() {
+        qmk2zmk::report_and_exit(e);
     }
 }
 
@@ -52,10 +45,7 @@ fn run() -> Result<(), Error> {
         }
     });
 
-    let source = std::fs::read_to_string(&cli.input).map_err(|source| Error::ReadFile {
-        path: cli.input.clone(),
-        source,
-    })?;
+    let source = io::read_input(&cli.input)?;
 
     let keymap = match format {
         InputFormat::C    => parser::qmk_c::parse(&source).map_err(Error::ParseC)?,
@@ -63,14 +53,5 @@ fn run() -> Result<(), Error> {
     };
 
     let output = zmk::render(&keymap);
-
-    match cli.output {
-        Some(ref path) => std::fs::write(path, &output).map_err(|source| Error::WriteFile {
-            path: path.clone(),
-            source,
-        })?,
-        None => print!("{output}"),
-    }
-
-    Ok(())
+    io::write_output(&output, cli.output.as_deref())
 }
