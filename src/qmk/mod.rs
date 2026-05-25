@@ -125,6 +125,11 @@ fn key_to_qmk_str(key: &Key) -> String {
         Key::Kp(zmk)       => codes::zmk_key_expr_to_qmk(zmk),
         Key::Mo(n)         => format!("MO({n})"),
         Key::Tog(n)        => format!("TG({n})"),
+        Key::Sk(m)         => format!("OSM({})", codes::zmk_mod_to_qmk(m)),
+        Key::Sl(n)         => format!("OSL({n})"),
+        Key::To(n)         => format!("TO({n})"),
+        Key::Mmv(d)        => zmk_mmv_to_qmk(d),
+        Key::Mkp(b)        => zmk_mkp_to_qmk(b),
         Key::Lt(n, k)      => format!("LT({n},{})", codes::zmk_key_expr_to_qmk(k)),
         Key::Mt(m, k)      => {
             let qm = codes::zmk_mod_to_qmk(m);
@@ -134,6 +139,27 @@ fn key_to_qmk_str(key: &Key) -> String {
                                    .map_or_else(|| format!("/* {a} */"), Into::into),
         Key::Macro(name)   => name.clone(),
         Key::Unknown(s)    => format!("/* TODO: {s} */"),
+    }
+}
+
+fn zmk_mmv_to_qmk(dir: &str) -> String {
+    match dir {
+        "MOVE_UP"    => "KC_MS_U".into(),
+        "MOVE_DOWN"  => "KC_MS_D".into(),
+        "MOVE_LEFT"  => "KC_MS_L".into(),
+        "MOVE_RIGHT" => "KC_MS_R".into(),
+        _ => format!("/* mmv {dir} */"),
+    }
+}
+
+fn zmk_mkp_to_qmk(btn: &str) -> String {
+    match btn {
+        "LCLK" => "KC_BTN1".into(),
+        "RCLK" => "KC_BTN2".into(),
+        "MCLK" => "KC_BTN3".into(),
+        "BTN4" => "KC_BTN4".into(),
+        "BTN5" => "KC_BTN5".into(),
+        _ => format!("/* mkp {btn} */"),
     }
 }
 
@@ -199,6 +225,34 @@ mod tests {
         assert!(out.contains(r#""QK_RBT""#));
         assert!(out.contains(r#""MO(1)""#));
         assert!(out.contains(r#""TG(2)""#));
+    }
+
+    #[test]
+    fn json_one_shot_and_to() {
+        let km = simple_keymap(vec![
+            Key::Sk("LSHFT".into()),
+            Key::Sl(1),
+            Key::To(0),
+        ]);
+        let out = render_json(&km);
+        assert!(out.contains(r#""OSM(MOD_LSFT)""#));
+        assert!(out.contains(r#""OSL(1)""#));
+        assert!(out.contains(r#""TO(0)""#));
+    }
+
+    #[test]
+    fn json_mouse_keys() {
+        let km = simple_keymap(vec![
+            Key::Mmv("MOVE_UP".into()),
+            Key::Mmv("MOVE_DOWN".into()),
+            Key::Mkp("LCLK".into()),
+            Key::Mkp("RCLK".into()),
+        ]);
+        let out = render_json(&km);
+        assert!(out.contains(r#""KC_MS_U""#));
+        assert!(out.contains(r#""KC_MS_D""#));
+        assert!(out.contains(r#""KC_BTN1""#));
+        assert!(out.contains(r#""KC_BTN2""#));
     }
 
     #[test]

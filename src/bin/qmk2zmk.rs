@@ -23,6 +23,10 @@ struct Cli {
     /// Output file (defaults to stdout)
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Print warnings for unmapped keycodes to stderr
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 fn main() {
@@ -52,6 +56,9 @@ fn run() -> Result<(), Error> {
         InputFormat::Json => qmk::parse_json::parse(&source).map_err(Error::ParseJson)?,
     };
 
+    if cli.verbose {
+        qmk2zmk::warn_unknowns(&keymap);
+    }
     let output = zmk::render(&keymap);
     io::write_output(&output, cli.output.as_deref())
 }

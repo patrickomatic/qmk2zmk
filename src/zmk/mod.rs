@@ -17,6 +17,9 @@ use crate::ir::{Key, Keymap, MacroStep, TriLayer};
     if uses_rgb(keymap) {
         out.push_str("#include <dt-bindings/zmk/rgb.h>\n");
     }
+    if uses_mouse(keymap) {
+        out.push_str("#include <dt-bindings/zmk/mouse.h>\n");
+    }
 
     out.push_str("\n/ {\n");
 
@@ -130,6 +133,11 @@ fn render_key(key: &Key) -> String {
         Key::Lt(n, k)     => format!("&lt {n} {k}"),
         Key::Mt(m, k)     => format!("&mt {m} {k}"),
         Key::Tog(n)       => format!("&tog {n}"),
+        Key::Sk(m)        => format!("&sk {m}"),
+        Key::Sl(n)        => format!("&sl {n}"),
+        Key::To(n)        => format!("&to {n}"),
+        Key::Mmv(d)       => format!("&mmv {d}"),
+        Key::Mkp(b)       => format!("&mkp {b}"),
         Key::Trans        => "&trans".into(),
         Key::None         => "&none".into(),
         Key::CapsWord     => "&caps_word".into(),
@@ -176,6 +184,14 @@ fn uses_rgb(keymap: &Keymap) -> bool {
         .any(|k| matches!(k, Key::RgbUg(_)))
 }
 
+fn uses_mouse(keymap: &Keymap) -> bool {
+    keymap
+        .layers
+        .iter()
+        .flat_map(|l| &l.keys)
+        .any(|k| matches!(k, Key::Mmv(_) | Key::Mkp(_)))
+}
+
 fn has_macros(keymap: &Keymap) -> bool {
     !keymap.macros.is_empty()
         || keymap
@@ -214,10 +230,27 @@ mod tests {
     fn render_key_behaviors() {
         assert_eq!(render_key(&Key::Mo(1)),                    "&mo 1");
         assert_eq!(render_key(&Key::Tog(2)),                   "&tog 2");
+        assert_eq!(render_key(&Key::Sk("LSHFT".into())),       "&sk LSHFT");
+        assert_eq!(render_key(&Key::Sl(1)),                    "&sl 1");
+        assert_eq!(render_key(&Key::To(0)),                    "&to 0");
+        assert_eq!(render_key(&Key::Mmv("MOVE_UP".into())),    "&mmv MOVE_UP");
+        assert_eq!(render_key(&Key::Mkp("LCLK".into())),       "&mkp LCLK");
         assert_eq!(render_key(&Key::Mt("LALT".into(), "Z".into())), "&mt LALT Z");
         assert_eq!(render_key(&Key::Lt(1, "SPACE".into())),    "&lt 1 SPACE");
         assert_eq!(render_key(&Key::RgbUg("RGB_TOG".into())),  "&rgb_ug RGB_TOG");
         assert_eq!(render_key(&Key::Macro("MY_MACRO".into())), "&MY_MACRO");
+    }
+
+    #[test]
+    fn mouse_include_only_when_needed() {
+        let without = simple_keymap(vec![Key::Kp("A".into())]);
+        assert!(!render(&without).contains("zmk/mouse.h"));
+
+        let with_mmv = simple_keymap(vec![Key::Mmv("MOVE_UP".into())]);
+        assert!(render(&with_mmv).contains("zmk/mouse.h"));
+
+        let with_mkp = simple_keymap(vec![Key::Mkp("LCLK".into())]);
+        assert!(render(&with_mkp).contains("zmk/mouse.h"));
     }
 
     #[test]

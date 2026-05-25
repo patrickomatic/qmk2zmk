@@ -42,6 +42,7 @@ Arguments:
 Options:
   -f, --format <FORMAT>  Input format: c or json (auto-detected from extension)
   -o, --output <OUTPUT>  Output file (defaults to stdout)
+  -v, --verbose          Print warnings for unmapped keycodes to stderr
   -h, --help             Print help
 ```
 
@@ -51,6 +52,9 @@ qmk2zmk keymap.c
 
 # Write to a file
 qmk2zmk keymap.c -o my_keymap.keymap
+
+# Show warnings for any keys that couldn't be mapped
+qmk2zmk keymap.c -v
 
 # Explicit format flag
 qmk2zmk -f json keymap.json -o my_keymap.keymap
@@ -68,6 +72,7 @@ Options:
   -f, --format <FORMAT>  Output format: json or c [default: json]
       --layout <LAYOUT>  QMK LAYOUT macro name used in C output [default: LAYOUT]
   -o, --output <OUTPUT>  Output file (defaults to stdout)
+  -v, --verbose          Print warnings for unmapped keycodes to stderr
   -h, --help             Print help
 ```
 
@@ -96,13 +101,23 @@ zmk2qmk my_keymap.keymap -f c --layout LAYOUT_planck_grid -o keymap.c
 | `LT(1, KC_SPACE)` | `&lt 1 SPACE` |
 | `MO(_LOWER)` | `&mo 1` |
 | `TG(_LOWER)` | `&tog 1` |
+| `TO(_BASE)` | `&to 0` |
+| `OSM(MOD_LSFT)` | `&sk LSHFT` |
+| `OSL(1)` | `&sl 1` |
 | `LGUI(LSFT(KC_LBRC))` | `&kp LG(LS(LBKT))` |
+| `HYPR(KC_A)` | `&kp LG(LA(LS(LC(A))))` |
+| `MEH(KC_A)` | `&kp LA(LS(LC(A)))` |
+| `KC_MS_U/D/L/R` | `&mmv MOVE_UP/DOWN/LEFT/RIGHT` |
+| `KC_BTN1/2/3` | `&mkp LCLK/RCLK/MCLK` |
+| `KC_UNDO`, `KC_COPY`, `KC_PASTE`, … | `&kp K_UNDO`, `&kp K_COPY`, … |
+| `KC_NUBS`, `KC_NUHS` | `&kp NON_US_BSLH`, `&kp NON_US_HASH` |
 | `CW_TOGG` | `&caps_word` |
 | `QK_BOOT` | `&bootloader` |
-| `RGB_TOG`, `RGB_HUI`, … | `&rgb_ug RGB_TOG`, … |
+| `RGB_TOG`, `RGB_HUI`, `RGB_SPI`, … | `&rgb_ug RGB_TOG`, … |
 | `#define LOWER MO(_LOWER)` | resolved automatically |
 | `update_tri_layer_state` | `conditional_layers` block |
 | Custom macros (`ST_MACRO_0`, …) | stub with `// TODO` |
+| `TD(...)`, `LM(...)` | `/* TODO */` comment |
 
 ### ZMK → QMK
 
@@ -116,11 +131,17 @@ zmk2qmk my_keymap.keymap -f c --layout LAYOUT_planck_grid -o keymap.c
 | `&lt 1 SPACE` | `LT(1,KC_SPACE)` |
 | `&mo 1` | `MO(1)` |
 | `&tog 1` | `TG(1)` |
+| `&to 0` | `TO(0)` |
+| `&sk LSHFT` | `OSM(MOD_LSFT)` |
+| `&sl 1` | `OSL(1)` |
 | `&kp LG(LS(LBKT))` | `LGUI(LSFT(KC_LBRC))` |
+| `&mmv MOVE_UP/DOWN/LEFT/RIGHT` | `KC_MS_U/D/L/R` |
+| `&mkp LCLK/RCLK/MCLK` | `KC_BTN1/2/3` |
 | `&caps_word` | `CW_TOGG` |
 | `&bootloader` | `QK_BOOT` |
 | `&sys_reset` | `QK_RBT` |
 | `&rgb_ug RGB_TOG`, … | `RGB_TOG`, … |
+| `&bt BT_SEL …`, `&out OUT_USB` | `/* TODO */` comment |
 | `conditional_layers` block | `update_tri_layer_state` (C only) |
 
 Punctuation and special keys are remapped where the names differ between firmwares (e.g. `SEMI` ↔ `KC_SCLN`, `LBKT` ↔ `KC_LBRC`, `BSLH` ↔ `KC_BSLS`).
@@ -128,6 +149,10 @@ Punctuation and special keys are remapped where the names differ between firmwar
 ## Known gaps
 
 - **Custom macro bodies** — `process_record_user` is not parsed by `qmk2zmk`. Macros get a stub in the `macros {}` block for you to fill in. `zmk2qmk` generates a `process_record_user` stub in C output.
+- **Tap dance** (`TD(...)`) — no ZMK equivalent; emitted as a `/* TODO */` comment.
+- **Layer-mod** (`LM(...)`) — no ZMK equivalent; emitted as a `/* TODO */` comment.
+- **Bluetooth / output keys** (`&bt`, `&out`) — no QMK equivalent; preserved as `/* TODO */` in QMK output.
+- **Mouse scroll** (`KC_MS_WH_UP/DN`) — not yet handled; emitted as `/* TODO */`.
 - **Dynamic tapping term keys** (`QK_DYNAMIC_TAPPING_TERM_*`) — no ZMK equivalent; emitted as `/* TODO */` comments.
 - **ZSA-specific features** — RGB lighting config, `rawhid_state`, and LED maps are not translated.
 - **Target board/shield** — output is board-agnostic. You still need to wire it into your ZMK or QMK config with the correct board files.

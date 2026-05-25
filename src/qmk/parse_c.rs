@@ -345,6 +345,10 @@ fn atom_to_key(
         return Key::RgbUg(action.to_string());
     }
 
+    if let Some(k) = qmk_mouse_to_zmk_key(name) {
+        return k;
+    }
+
     if let Some(zmk) = codes::qmk_key_to_zmk(name) {
         return Key::Kp(zmk.to_string());
     }
@@ -394,6 +398,40 @@ fn func_to_key(
                 None => Key::Unknown(format!("LT({layer}, {key_str})")),
             }
         }
+        "OSM" if args.len() == 1 => {
+            let mod_str = args[0].as_atom().unwrap_or("").trim();
+            Key::Sk(codes::qmk_mod_to_zmk(mod_str).to_string())
+        }
+        "OSL" if args.len() == 1 => {
+            let layer = args[0].as_atom().unwrap_or("").trim();
+            match resolve_layer(layer, layer_map) {
+                Some(idx) => Key::Sl(idx),
+                None => Key::Unknown(format!("OSL({layer})")),
+            }
+        }
+        "TO" if args.len() == 1 => {
+            let layer = args[0].as_atom().unwrap_or("").trim();
+            match resolve_layer(layer, layer_map) {
+                Some(idx) => Key::To(idx),
+                None => Key::Unknown(format!("TO({layer})")),
+            }
+        }
+        "TD" => Key::Unknown(format!(
+            "TD({}) /* tap dance: no ZMK equivalent */",
+            args.iter().filter_map(|a| a.as_atom()).collect::<Vec<_>>().join(", ")
+        )),
+        "LM" => Key::Unknown(format!(
+            "LM({}) /* layer-mod: no ZMK equivalent */",
+            args.iter().filter_map(|a| a.as_atom()).collect::<Vec<_>>().join(", ")
+        )),
+        "HYPR" if args.len() == 1 => {
+            let inner = build_zmk_key_expr(&args[0]);
+            Key::Kp(format!("LG(LA(LS(LC({inner}))))"))
+        }
+        "MEH" if args.len() == 1 => {
+            let inner = build_zmk_key_expr(&args[0]);
+            Key::Kp(format!("LA(LS(LC({inner})))"))
+        }
         // Modifier-wrapping functions: LGUI(x), LSFT(x), etc.
         mod_fn if codes::qmk_mod_fn_to_zmk(mod_fn).is_some() && args.len() == 1 => {
             let prefix = codes::qmk_mod_fn_to_zmk(mod_fn).unwrap();
@@ -409,6 +447,22 @@ fn func_to_key(
                 .join(", ")
         )),
     }
+}
+
+fn qmk_mouse_to_zmk_key(name: &str) -> Option<Key> {
+    let key = name.strip_prefix("KC_").unwrap_or(name);
+    Some(match key {
+        "MS_U" | "MS_UP"    => Key::Mmv("MOVE_UP".into()),
+        "MS_D" | "MS_DOWN"  => Key::Mmv("MOVE_DOWN".into()),
+        "MS_L" | "MS_LEFT"  => Key::Mmv("MOVE_LEFT".into()),
+        "MS_R" | "MS_RIGHT" => Key::Mmv("MOVE_RIGHT".into()),
+        "BTN1"              => Key::Mkp("LCLK".into()),
+        "BTN2"              => Key::Mkp("RCLK".into()),
+        "BTN3"              => Key::Mkp("MCLK".into()),
+        "BTN4"              => Key::Mkp("BTN4".into()),
+        "BTN5"              => Key::Mkp("BTN5".into()),
+        _ => return None,
+    })
 }
 
 /// Recursively build a ZMK key expression string for nested mod wrappers.
@@ -675,6 +729,66 @@ mod tests {
     fn unknown_keycode() {
         let key = key("SOME_UNRECOGNISED_CODE");
         assert!(matches!(key, Key::Unknown(_)));
+    }
+
+    #[test]
+    fn one_shot_mod() {
+        let k = key("OSM(MOD_LSFT)");
+        assert!(matches!(k, Key::Sk(m) if m == "LSHFT"));
+    }
+
+    #[test]
+    fn one_shot_layer() {
+        let lm = layer_map(&[("_FN", 1)]);
+        let k = key_with("OSL(_FN)", &lm, &HashMap::new(), &HashSet::new());
+        assert!(matches!(k, Key::Sl(1)));
+    }
+
+    #[test]
+    fn to_layer() {
+        let lm = layer_map(&[("_BASE", 0)]);
+        let k = key_with("TO(_BASE)", &lm, &HashMap::new(), &HashSet::new());
+        assert!(matches!(k, Key::To(0)));
+    }
+
+    #[test]
+    fn tap_dance_is_unknown() {
+        let k = key("TD(DANCE_0)");
+        assert!(matches!(k, Key::Unknown(s) if s.contains("TD")));
+    }
+
+    #[test]
+    fn lm_is_unknown() {
+        let lm = layer_map(&[("_LOWER", 1)]);
+        let k = key_with("LM(_LOWER, MOD_LSFT)", &lm, &HashMap::new(), &HashSet::new());
+        assert!(matches!(k, Key::Unknown(s) if s.contains("LM")));
+    }
+
+    #[test]
+    fn hypr_wraps_all_mods() {
+        let k = key("HYPR(KC_A)");
+        assert!(matches!(k, Key::Kp(s) if s == "LG(LA(LS(LC(A))))"));
+    }
+
+    #[test]
+    fn meh_wraps_three_mods() {
+        let k = key("MEH(KC_A)");
+        assert!(matches!(k, Key::Kp(s) if s == "LA(LS(LC(A)))"));
+    }
+
+    #[test]
+    fn mouse_move_keys() {
+        assert!(matches!(key("KC_MS_U"), Key::Mmv(d) if d == "MOVE_UP"));
+        assert!(matches!(key("KC_MS_D"), Key::Mmv(d) if d == "MOVE_DOWN"));
+        assert!(matches!(key("KC_MS_L"), Key::Mmv(d) if d == "MOVE_LEFT"));
+        assert!(matches!(key("KC_MS_R"), Key::Mmv(d) if d == "MOVE_RIGHT"));
+    }
+
+    #[test]
+    fn mouse_button_keys() {
+        assert!(matches!(key("KC_BTN1"), Key::Mkp(b) if b == "LCLK"));
+        assert!(matches!(key("KC_BTN2"), Key::Mkp(b) if b == "RCLK"));
+        assert!(matches!(key("KC_BTN3"), Key::Mkp(b) if b == "MCLK"));
     }
 
     // ── extract_raw_layers ────────────────────────────────────────────────────

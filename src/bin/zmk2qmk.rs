@@ -27,6 +27,10 @@ struct Cli {
     /// Output file (defaults to stdout)
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Print warnings for unmapped keycodes to stderr
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 fn main() {
@@ -45,6 +49,9 @@ fn run() -> Result<(), Error> {
         keymap.layout = Some(cli.layout);
     }
 
+    if cli.verbose {
+        qmk2zmk::warn_unknowns(&keymap);
+    }
     let output = match cli.format {
         OutputFormat::Json => qmk::render_json(&keymap),
         OutputFormat::C    => qmk::render_c(&keymap),

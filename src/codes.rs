@@ -1,5 +1,7 @@
 /// Map a QMK keycode (with or without KC_ prefix) to a ZMK key name.
-#[must_use] pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
     let key = qmk.strip_prefix("KC_").unwrap_or(qmk);
     Some(match key {
         // Letters
@@ -100,11 +102,20 @@
         "KP_PLUS"     => "KP_PLUS",
         "KP_ENTER"    => "KP_ENTER",
         "KP_DOT"      => "KP_DOT",
+        // Application control
+        "AGAIN" | "AGIN"                    => "K_REDO",
+        "UNDO"                              => "K_UNDO",
+        "CUT"                               => "K_CUT",
+        "COPY"                              => "K_COPY",
+        "PASTE" | "PSTE"                    => "K_PASTE",
+        // Non-US keys
+        "NUBS" | "NONUS_BACKSLASH"          => "NON_US_BSLH",
+        "NUHS" | "NONUS_HASH"               => "NON_US_HASH",
         // Misc
-        "PSCR" | "PRINT_SCREEN" => "PSCRN",
-        "SCRL" | "SCROLLLOCK"   => "SLCK",
-        "PAUS" | "PAUSE"        => "PAUSE_BREAK",
-        "APP"                   => "K_APP",
+        "PSCR" | "PRINT_SCREEN"             => "PSCRN",
+        "SCRL" | "SCROLLLOCK"               => "SLCK",
+        "PAUS" | "PAUSE"                    => "PAUSE_BREAK",
+        "APP"                               => "K_APP",
         _ => return None,
     })
 }
@@ -151,12 +162,15 @@
         "RGB_VAD"                    => "RGB_VAD",
         "RGB_MODE_FORWARD" | "RGB_MOD"  => "RGB_EFF",
         "RGB_MODE_REVERSE" | "RGB_RMOD" => "RGB_EFR",
+        "RGB_SPI"                       => "RGB_SPI",
+        "RGB_SPD"                       => "RGB_SPD",
         _ => return None,
     })
 }
 
 /// Map a ZMK key name back to a QMK keycode string (with `KC_` prefix).
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn zmk_key_to_qmk(zmk: &str) -> Option<&'static str> {
     Some(match zmk {
         // Letters
@@ -257,11 +271,20 @@ pub fn zmk_key_to_qmk(zmk: &str) -> Option<&'static str> {
         "KP_PLUS"     => "KC_KP_PLUS",
         "KP_ENTER"    => "KC_KP_ENTER",
         "KP_DOT"      => "KC_KP_DOT",
+        // Application control
+        "K_REDO"       => "KC_AGAIN",
+        "K_UNDO"       => "KC_UNDO",
+        "K_CUT"        => "KC_CUT",
+        "K_COPY"       => "KC_COPY",
+        "K_PASTE"      => "KC_PASTE",
+        // Non-US keys
+        "NON_US_BSLH"  => "KC_NUBS",
+        "NON_US_HASH"  => "KC_NUHS",
         // Misc
-        "PSCRN"       => "KC_PSCR",
-        "SLCK"        => "KC_SCRL",
-        "PAUSE_BREAK" => "KC_PAUS",
-        "K_APP"       => "KC_APP",
+        "PSCRN"        => "KC_PSCR",
+        "SLCK"         => "KC_SCRL",
+        "PAUSE_BREAK"  => "KC_PAUS",
+        "K_APP"        => "KC_APP",
         _ => return None,
     })
 }
@@ -344,6 +367,8 @@ pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
         "RGB_VAD" => "RGB_VAD",
         "RGB_EFF" => "RGB_MODE_FORWARD",
         "RGB_EFR" => "RGB_MODE_REVERSE",
+        "RGB_SPI" => "RGB_SPI",
+        "RGB_SPD" => "RGB_SPD",
         _ => return None,
     })
 }
@@ -499,6 +524,31 @@ mod tests {
     fn reverse_unknown_returns_none() {
         assert_eq!(zmk_key_to_qmk("NOT_A_KEY"), None);
         assert_eq!(zmk_key_to_qmk("LC(C)"),     None);
+    }
+
+    #[test]
+    fn application_keys() {
+        assert_eq!(qmk_key_to_zmk("KC_UNDO"),  Some("K_UNDO"));
+        assert_eq!(qmk_key_to_zmk("KC_AGAIN"), Some("K_REDO"));
+        assert_eq!(qmk_key_to_zmk("KC_CUT"),   Some("K_CUT"));
+        assert_eq!(qmk_key_to_zmk("KC_COPY"),  Some("K_COPY"));
+        assert_eq!(qmk_key_to_zmk("KC_PASTE"), Some("K_PASTE"));
+    }
+
+    #[test]
+    fn non_us_keys() {
+        assert_eq!(qmk_key_to_zmk("KC_NUBS"), Some("NON_US_BSLH"));
+        assert_eq!(qmk_key_to_zmk("KC_NUHS"), Some("NON_US_HASH"));
+        assert_eq!(zmk_key_to_qmk("NON_US_BSLH"), Some("KC_NUBS"));
+        assert_eq!(zmk_key_to_qmk("NON_US_HASH"), Some("KC_NUHS"));
+    }
+
+    #[test]
+    fn rgb_speed_keys() {
+        assert_eq!(qmk_rgb_to_zmk("RGB_SPI"), Some("RGB_SPI"));
+        assert_eq!(qmk_rgb_to_zmk("RGB_SPD"), Some("RGB_SPD"));
+        assert_eq!(zmk_rgb_to_qmk("RGB_SPI"), Some("RGB_SPI"));
+        assert_eq!(zmk_rgb_to_qmk("RGB_SPD"), Some("RGB_SPD"));
     }
 
     #[test]

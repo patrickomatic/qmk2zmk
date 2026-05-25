@@ -230,6 +230,25 @@ fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
         "tog" => tokens.get(1)
             .and_then(|n| n.parse().ok())
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Tog),
+        "sk" => tokens.get(1).map_or(
+            Key::Unknown("sk".into()),
+            |m| Key::Sk((*m).to_string()),
+        ),
+        "sl" => tokens.get(1)
+            .and_then(|n| n.parse().ok())
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Sl),
+        "to" => tokens.get(1)
+            .and_then(|n| n.parse().ok())
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::To),
+        "mmv" => tokens.get(1).map_or(
+            Key::Unknown("mmv".into()),
+            |d| Key::Mmv((*d).to_string()),
+        ),
+        "mkp" => tokens.get(1).map_or(
+            Key::Unknown("mkp".into()),
+            |b| Key::Mkp((*b).to_string()),
+        ),
+        "bt" | "out" => Key::Unknown(format!("&{}", tokens.join(" "))),
         "trans"      => Key::Trans,
         "none"       => Key::None,
         "caps_word"  => Key::CapsWord,
@@ -240,7 +259,7 @@ fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
             |a| Key::RgbUg((*a).to_string()),
         ),
         name if macro_names.contains(name) => Key::Macro(name.to_string()),
-        name => Key::Unknown(format!("&{name}")),
+        _ => Key::Unknown(format!("&{}", tokens.join(" "))),
     }
 }
 
@@ -373,5 +392,57 @@ mod tests {
         assert_eq!(km.macros.len(), 1);
         assert_eq!(km.macros[0].name, "MY_MACRO");
         assert!(matches!(&km.layers[0].keys[0], Key::Macro(n) if n == "MY_MACRO"));
+    }
+
+    #[test]
+    fn parses_one_shot_and_to() {
+        let src = r#"
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <&sk LSHFT &sl 1 &to 0>;
+        };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        let keys = &km.layers[0].keys;
+        assert!(matches!(&keys[0], Key::Sk(m) if m == "LSHFT"));
+        assert!(matches!(&keys[1], Key::Sl(1)));
+        assert!(matches!(&keys[2], Key::To(0)));
+    }
+
+    #[test]
+    fn parses_mouse_keys() {
+        let src = r#"
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <&mmv MOVE_UP &mkp LCLK>;
+        };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        let keys = &km.layers[0].keys;
+        assert!(matches!(&keys[0], Key::Mmv(d) if d == "MOVE_UP"));
+        assert!(matches!(&keys[1], Key::Mkp(b) if b == "LCLK"));
+    }
+
+    #[test]
+    fn bt_and_out_preserved_as_unknown() {
+        let src = r#"
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <&bt BT_SEL 0 &out OUT_USB>;
+        };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        let keys = &km.layers[0].keys;
+        assert!(matches!(&keys[0], Key::Unknown(s) if s.contains("bt") && s.contains("BT_SEL")));
+        assert!(matches!(&keys[1], Key::Unknown(s) if s.contains("out") && s.contains("OUT_USB")));
     }
 }
