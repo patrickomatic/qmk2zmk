@@ -239,7 +239,7 @@ fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Sl),
         "to" => tokens.get(1)
             .and_then(|n| n.parse().ok())
-            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::To),
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Df),
         "mmv" => tokens.get(1).map_or(
             Key::Unknown("mmv".into()),
             |d| Key::Mmv((*d).to_string()),
@@ -247,6 +247,10 @@ fn binding_to_key(tokens: &[&str], macro_names: &HashSet<&str>) -> Key {
         "mkp" => tokens.get(1).map_or(
             Key::Unknown("mkp".into()),
             |b| Key::Mkp((*b).to_string()),
+        ),
+        "msc" => tokens.get(1).map_or(
+            Key::Unknown("msc".into()),
+            |d| Key::Msc((*d).to_string()),
         ),
         "bt" | "out" => Key::Unknown(format!("&{}", tokens.join(" "))),
         "trans"      => Key::Trans,
@@ -409,7 +413,7 @@ mod tests {
         let keys = &km.layers[0].keys;
         assert!(matches!(&keys[0], Key::Sk(m) if m == "LSHFT"));
         assert!(matches!(&keys[1], Key::Sl(1)));
-        assert!(matches!(&keys[2], Key::To(0)));
+        assert!(matches!(&keys[2], Key::Df(0)));
     }
 
     #[test]

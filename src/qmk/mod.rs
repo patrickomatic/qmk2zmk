@@ -128,8 +128,10 @@ fn key_to_qmk_str(key: &Key) -> String {
         Key::Sk(m)         => format!("OSM({})", codes::zmk_mod_to_qmk(m)),
         Key::Sl(n)         => format!("OSL({n})"),
         Key::To(n)         => format!("TO({n})"),
+        Key::Df(n)         => format!("DF({n})"),
         Key::Mmv(d)        => zmk_mmv_to_qmk(d),
         Key::Mkp(b)        => zmk_mkp_to_qmk(b),
+        Key::Msc(d)        => zmk_msc_to_qmk(d),
         Key::Lt(n, k)      => format!("LT({n},{})", codes::zmk_key_expr_to_qmk(k)),
         Key::Mt(m, k)      => {
             let qm = codes::zmk_mod_to_qmk(m);
@@ -160,6 +162,16 @@ fn zmk_mkp_to_qmk(btn: &str) -> String {
         "BTN4" => "KC_BTN4".into(),
         "BTN5" => "KC_BTN5".into(),
         _ => format!("/* mkp {btn} */"),
+    }
+}
+
+fn zmk_msc_to_qmk(dir: &str) -> String {
+    match dir {
+        "SCRL_UP"    => "KC_WH_U".into(),
+        "SCRL_DOWN"  => "KC_WH_D".into(),
+        "SCRL_LEFT"  => "KC_WH_L".into(),
+        "SCRL_RIGHT" => "KC_WH_R".into(),
+        _ => format!("/* msc {dir} */"),
     }
 }
 
@@ -247,12 +259,23 @@ mod tests {
             Key::Mmv("MOVE_DOWN".into()),
             Key::Mkp("LCLK".into()),
             Key::Mkp("RCLK".into()),
+            Key::Msc("SCRL_UP".into()),
+            Key::Msc("SCRL_DOWN".into()),
         ]);
         let out = render_json(&km);
         assert!(out.contains(r#""KC_MS_U""#));
         assert!(out.contains(r#""KC_MS_D""#));
         assert!(out.contains(r#""KC_BTN1""#));
         assert!(out.contains(r#""KC_BTN2""#));
+        assert!(out.contains(r#""KC_WH_U""#));
+        assert!(out.contains(r#""KC_WH_D""#));
+    }
+
+    #[test]
+    fn json_df_renders_as_df() {
+        let km = simple_keymap(vec![Key::Df(1)]);
+        let out = render_json(&km);
+        assert!(out.contains(r#""DF(1)""#));
     }
 
     #[test]

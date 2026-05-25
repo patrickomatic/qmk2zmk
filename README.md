@@ -102,6 +102,7 @@ zmk2qmk my_keymap.keymap -f c --layout LAYOUT_planck_grid -o keymap.c
 | `MO(_LOWER)` | `&mo 1` |
 | `TG(_LOWER)` | `&tog 1` |
 | `TO(_BASE)` | `&to 0` |
+| `DF(_BASE)` | `&to 0` |
 | `OSM(MOD_LSFT)` | `&sk LSHFT` |
 | `OSL(1)` | `&sl 1` |
 | `LGUI(LSFT(KC_LBRC))` | `&kp LG(LS(LBKT))` |
@@ -109,6 +110,7 @@ zmk2qmk my_keymap.keymap -f c --layout LAYOUT_planck_grid -o keymap.c
 | `MEH(KC_A)` | `&kp LA(LS(LC(A)))` |
 | `KC_MS_U/D/L/R` | `&mmv MOVE_UP/DOWN/LEFT/RIGHT` |
 | `KC_BTN1/2/3` | `&mkp LCLK/RCLK/MCLK` |
+| `KC_WH_U/D/L/R` | `&msc SCRL_UP/DOWN/LEFT/RIGHT` |
 | `KC_UNDO`, `KC_COPY`, `KC_PASTE`, … | `&kp K_UNDO`, `&kp K_COPY`, … |
 | `KC_NUBS`, `KC_NUHS` | `&kp NON_US_BSLH`, `&kp NON_US_HASH` |
 | `CW_TOGG` | `&caps_word` |
@@ -131,12 +133,13 @@ zmk2qmk my_keymap.keymap -f c --layout LAYOUT_planck_grid -o keymap.c
 | `&lt 1 SPACE` | `LT(1,KC_SPACE)` |
 | `&mo 1` | `MO(1)` |
 | `&tog 1` | `TG(1)` |
-| `&to 0` | `TO(0)` |
+| `&to 0` | `DF(0)` |
 | `&sk LSHFT` | `OSM(MOD_LSFT)` |
 | `&sl 1` | `OSL(1)` |
 | `&kp LG(LS(LBKT))` | `LGUI(LSFT(KC_LBRC))` |
 | `&mmv MOVE_UP/DOWN/LEFT/RIGHT` | `KC_MS_U/D/L/R` |
 | `&mkp LCLK/RCLK/MCLK` | `KC_BTN1/2/3` |
+| `&msc SCRL_UP/DOWN/LEFT/RIGHT` | `KC_WH_U/D/L/R` |
 | `&caps_word` | `CW_TOGG` |
 | `&bootloader` | `QK_BOOT` |
 | `&sys_reset` | `QK_RBT` |
@@ -152,7 +155,6 @@ Punctuation and special keys are remapped where the names differ between firmwar
 - **Tap dance** (`TD(...)`) — no ZMK equivalent; emitted as a `/* TODO */` comment.
 - **Layer-mod** (`LM(...)`) — no ZMK equivalent; emitted as a `/* TODO */` comment.
 - **Bluetooth / output keys** (`&bt`, `&out`) — no QMK equivalent; preserved as `/* TODO */` in QMK output.
-- **Mouse scroll** (`KC_MS_WH_UP/DN`) — not yet handled; emitted as `/* TODO */`.
 - **Dynamic tapping term keys** (`QK_DYNAMIC_TAPPING_TERM_*`) — no ZMK equivalent; emitted as `/* TODO */` comments.
 - **ZSA-specific features** — RGB lighting config, `rawhid_state`, and LED maps are not translated.
 - **Target board/shield** — output is board-agnostic. You still need to wire it into your ZMK or QMK config with the correct board files.

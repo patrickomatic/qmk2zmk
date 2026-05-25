@@ -416,6 +416,13 @@ fn func_to_key(
                 None => Key::Unknown(format!("TO({layer})")),
             }
         }
+        "DF" if args.len() == 1 => {
+            let layer = args[0].as_atom().unwrap_or("").trim();
+            match resolve_layer(layer, layer_map) {
+                Some(idx) => Key::Df(idx),
+                None => Key::Unknown(format!("DF({layer})")),
+            }
+        }
         "TD" => Key::Unknown(format!(
             "TD({}) /* tap dance: no ZMK equivalent */",
             args.iter().filter_map(|a| a.as_atom()).collect::<Vec<_>>().join(", ")
@@ -452,15 +459,19 @@ fn func_to_key(
 fn qmk_mouse_to_zmk_key(name: &str) -> Option<Key> {
     let key = name.strip_prefix("KC_").unwrap_or(name);
     Some(match key {
-        "MS_U" | "MS_UP"    => Key::Mmv("MOVE_UP".into()),
-        "MS_D" | "MS_DOWN"  => Key::Mmv("MOVE_DOWN".into()),
-        "MS_L" | "MS_LEFT"  => Key::Mmv("MOVE_LEFT".into()),
-        "MS_R" | "MS_RIGHT" => Key::Mmv("MOVE_RIGHT".into()),
-        "BTN1"              => Key::Mkp("LCLK".into()),
-        "BTN2"              => Key::Mkp("RCLK".into()),
-        "BTN3"              => Key::Mkp("MCLK".into()),
-        "BTN4"              => Key::Mkp("BTN4".into()),
-        "BTN5"              => Key::Mkp("BTN5".into()),
+        "MS_U" | "MS_UP"             => Key::Mmv("MOVE_UP".into()),
+        "MS_D" | "MS_DOWN"           => Key::Mmv("MOVE_DOWN".into()),
+        "MS_L" | "MS_LEFT"           => Key::Mmv("MOVE_LEFT".into()),
+        "MS_R" | "MS_RIGHT"          => Key::Mmv("MOVE_RIGHT".into()),
+        "BTN1"                       => Key::Mkp("LCLK".into()),
+        "BTN2"                       => Key::Mkp("RCLK".into()),
+        "BTN3"                       => Key::Mkp("MCLK".into()),
+        "BTN4"                       => Key::Mkp("BTN4".into()),
+        "BTN5"                       => Key::Mkp("BTN5".into()),
+        "WH_U" | "MS_WH_UP"         => Key::Msc("SCRL_UP".into()),
+        "WH_D" | "MS_WH_DOWN"       => Key::Msc("SCRL_DOWN".into()),
+        "WH_L" | "MS_WH_LEFT"       => Key::Msc("SCRL_LEFT".into()),
+        "WH_R" | "MS_WH_RIGHT"      => Key::Msc("SCRL_RIGHT".into()),
         _ => return None,
     })
 }
@@ -749,6 +760,21 @@ mod tests {
         let lm = layer_map(&[("_BASE", 0)]);
         let k = key_with("TO(_BASE)", &lm, &HashMap::new(), &HashSet::new());
         assert!(matches!(k, Key::To(0)));
+    }
+
+    #[test]
+    fn default_layer() {
+        let lm = layer_map(&[("_BASE", 0), ("_QWERTY", 1)]);
+        let k = key_with("DF(_QWERTY)", &lm, &HashMap::new(), &HashSet::new());
+        assert!(matches!(k, Key::Df(1)));
+    }
+
+    #[test]
+    fn mouse_scroll_keys() {
+        assert!(matches!(key("KC_WH_U"), Key::Msc(d) if d == "SCRL_UP"));
+        assert!(matches!(key("KC_WH_D"), Key::Msc(d) if d == "SCRL_DOWN"));
+        assert!(matches!(key("KC_WH_L"), Key::Msc(d) if d == "SCRL_LEFT"));
+        assert!(matches!(key("KC_WH_R"), Key::Msc(d) if d == "SCRL_RIGHT"));
     }
 
     #[test]

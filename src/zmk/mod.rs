@@ -135,9 +135,10 @@ fn render_key(key: &Key) -> String {
         Key::Tog(n)       => format!("&tog {n}"),
         Key::Sk(m)        => format!("&sk {m}"),
         Key::Sl(n)        => format!("&sl {n}"),
-        Key::To(n)        => format!("&to {n}"),
+        Key::To(n) | Key::Df(n) => format!("&to {n}"),
         Key::Mmv(d)       => format!("&mmv {d}"),
         Key::Mkp(b)       => format!("&mkp {b}"),
+        Key::Msc(d)       => format!("&msc {d}"),
         Key::Trans        => "&trans".into(),
         Key::None         => "&none".into(),
         Key::CapsWord     => "&caps_word".into(),
@@ -189,7 +190,7 @@ fn uses_mouse(keymap: &Keymap) -> bool {
         .layers
         .iter()
         .flat_map(|l| &l.keys)
-        .any(|k| matches!(k, Key::Mmv(_) | Key::Mkp(_)))
+        .any(|k| matches!(k, Key::Mmv(_) | Key::Mkp(_) | Key::Msc(_)))
 }
 
 fn has_macros(keymap: &Keymap) -> bool {
@@ -233,8 +234,10 @@ mod tests {
         assert_eq!(render_key(&Key::Sk("LSHFT".into())),       "&sk LSHFT");
         assert_eq!(render_key(&Key::Sl(1)),                    "&sl 1");
         assert_eq!(render_key(&Key::To(0)),                    "&to 0");
+        assert_eq!(render_key(&Key::Df(1)),                    "&to 1");
         assert_eq!(render_key(&Key::Mmv("MOVE_UP".into())),    "&mmv MOVE_UP");
         assert_eq!(render_key(&Key::Mkp("LCLK".into())),       "&mkp LCLK");
+        assert_eq!(render_key(&Key::Msc("SCRL_UP".into())),    "&msc SCRL_UP");
         assert_eq!(render_key(&Key::Mt("LALT".into(), "Z".into())), "&mt LALT Z");
         assert_eq!(render_key(&Key::Lt(1, "SPACE".into())),    "&lt 1 SPACE");
         assert_eq!(render_key(&Key::RgbUg("RGB_TOG".into())),  "&rgb_ug RGB_TOG");
