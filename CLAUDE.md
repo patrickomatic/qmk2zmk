@@ -55,6 +55,14 @@ Run all tests with `cargo test`. There are three test suites:
 
 Add a test for every new parser feature or key mapping. Integration tests should assert on specific keys at known positions in the example keymap.
 
+## Releasing
+
+1. Bump `version` in `Cargo.toml`.
+2. Verify everything is green: `cargo test && cargo clippy --all-targets -- -W clippy::pedantic -D warnings`
+3. Commit the version bump and push to `main`.
+4. Run `make release` — this creates a `vX.Y.Z` git tag and pushes it to origin, which triggers the CI release workflow (`cargo-dist`) to build platform binaries and create a GitHub Release.
+5. Run `cargo publish` — publishes the crate to crates.io. This step is not automated by CI and must be run manually.
+
 ## Key mapping conventions
 
 QMK and ZMK use different names for the same physical keys. The canonical mapping lives in `src/codes.rs`. Notable differences:
