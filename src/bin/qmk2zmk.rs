@@ -58,21 +58,21 @@ fn run() -> Result<(), Error> {
 
     let input = cli.input.expect("required_unless_present = list_keyboards");
 
-    let format = cli.format.unwrap_or_else(|| {
-        match input.extension().and_then(|e| e.to_str()) {
-            Some("c")    => InputFormat::C,
+    let format = cli
+        .format
+        .unwrap_or_else(|| match input.extension().and_then(|e| e.to_str()) {
+            Some("c") => InputFormat::C,
             Some("json") => InputFormat::Json,
             _ => {
                 eprintln!("warning: cannot detect format from extension, assuming C");
                 InputFormat::C
             }
-        }
-    });
+        });
 
     let source = io::read_input(&input)?;
 
     let keymap = match format {
-        InputFormat::C    => qmk::parse_c::parse(&source).map_err(Error::ParseC)?,
+        InputFormat::C => qmk::parse_c::parse(&source).map_err(Error::ParseC)?,
         InputFormat::Json => qmk::parse_json::parse(&source).map_err(Error::ParseJson)?,
     };
 
@@ -80,7 +80,9 @@ fn run() -> Result<(), Error> {
         qmk2zmk::warn_unknowns(&keymap);
     }
 
-    let cols = cli.cols.or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
+    let cols = cli
+        .cols
+        .or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
     let output = zmk::render(&keymap, cols);
     io::write_output(&output, cli.output.as_deref())
 }

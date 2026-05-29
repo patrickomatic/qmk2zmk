@@ -38,7 +38,15 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
             let index = *layer_map.get(&name).unwrap_or(&0);
             let keys = raw_keys
                 .iter()
-                .map(|k| parse_key_expr_str(k.trim(), &layer_map, &defines, &custom_keycodes, &tap_dance_map))
+                .map(|k| {
+                    parse_key_expr_str(
+                        k.trim(),
+                        &layer_map,
+                        &defines,
+                        &custom_keycodes,
+                        &tap_dance_map,
+                    )
+                })
                 .collect();
             Layer { name, index, keys }
         })
@@ -201,10 +209,7 @@ fn extract_tri_layer(s: &str, layer_map: &HashMap<String, usize>) -> Option<TriL
 }
 
 fn resolve_layer(name: &str, layer_map: &HashMap<String, usize>) -> Option<usize> {
-    layer_map
-        .get(name)
-        .copied()
-        .or_else(|| name.parse().ok())
+    layer_map.get(name).copied().or_else(|| name.parse().ok())
 }
 
 // ── Keymaps array extraction ──────────────────────────────────────────────────
@@ -213,8 +218,8 @@ fn extract_raw_layers(s: &str) -> Result<Vec<(String, Vec<String>)>, ParseCError
     let keymaps_pos = s.find("keymaps").ok_or(ParseCError::NoKeymapsArray)?;
     let after = &s[keymaps_pos..];
     let brace = after.find('{').ok_or(ParseCError::NoKeymapsBrace)?;
-    let close = find_matching(&after[brace..], '{', '}')
-        .ok_or(ParseCError::UnmatchedKeymapsBrace)?;
+    let close =
+        find_matching(&after[brace..], '{', '}').ok_or(ParseCError::UnmatchedKeymapsBrace)?;
     let body = &after[brace + 1..brace + close];
 
     let mut layers = Vec::new();
@@ -230,15 +235,22 @@ fn extract_raw_layers(s: &str) -> Result<Vec<(String, Vec<String>)>, ParseCError
         let after_close = &after_bracket[close_bracket + 1..];
         let eq = after_close
             .find('=')
-            .ok_or_else(|| ParseCError::MissingEquals { layer: layer_name.clone() })?;
+            .ok_or_else(|| ParseCError::MissingEquals {
+                layer: layer_name.clone(),
+            })?;
         let after_eq = after_close[eq + 1..].trim_start();
 
         let paren = after_eq
             .find('(')
-            .ok_or_else(|| ParseCError::MissingLayoutParen { layer: layer_name.clone() })?;
+            .ok_or_else(|| ParseCError::MissingLayoutParen {
+                layer: layer_name.clone(),
+            })?;
         let layout_rest = &after_eq[paren..];
-        let close_paren = find_matching(layout_rest, '(', ')')
-            .ok_or_else(|| ParseCError::UnmatchedLayoutParen { layer: layer_name.clone() })?;
+        let close_paren = find_matching(layout_rest, '(', ')').ok_or_else(|| {
+            ParseCError::UnmatchedLayoutParen {
+                layer: layer_name.clone(),
+            }
+        })?;
 
         let keys_str = &layout_rest[1..close_paren];
         let keys: Vec<String> = split_args(keys_str)
@@ -264,7 +276,11 @@ enum Expr {
 
 impl Expr {
     fn as_atom(&self) -> Option<&str> {
-        if let Expr::Atom(s) = self { Some(s) } else { None }
+        if let Expr::Atom(s) = self {
+            Some(s)
+        } else {
+            None
+        }
     }
 }
 
@@ -280,7 +296,10 @@ fn parse_expr(s: &str) -> Expr {
                     .into_iter()
                     .map(|a| parse_expr(a.trim()))
                     .collect();
-                return Expr::Call { name: name.to_string(), args };
+                return Expr::Call {
+                    name: name.to_string(),
+                    args,
+                };
             }
         }
     }
@@ -320,7 +339,14 @@ fn expr_to_key(
 ) -> Key {
     match expr {
         Expr::Atom(name) => atom_to_key(name, layer_map, defines, custom_keycodes, tap_dance_map),
-        Expr::Call { name, args } => func_to_key(name, args, layer_map, defines, custom_keycodes, tap_dance_map),
+        Expr::Call { name, args } => func_to_key(
+            name,
+            args,
+            layer_map,
+            defines,
+            custom_keycodes,
+            tap_dance_map,
+        ),
     }
 }
 
@@ -444,7 +470,10 @@ fn func_to_key(
         }
         "LM" => Key::Unknown(format!(
             "LM({}) /* layer-mod: no ZMK equivalent */",
-            args.iter().filter_map(|a| a.as_atom()).collect::<Vec<_>>().join(", ")
+            args.iter()
+                .filter_map(|a| a.as_atom())
+                .collect::<Vec<_>>()
+                .join(", ")
         )),
         "HYPR" if args.len() == 1 => {
             let inner = build_zmk_key_expr(&args[0]);
@@ -474,19 +503,19 @@ fn func_to_key(
 fn qmk_mouse_to_zmk_key(name: &str) -> Option<Key> {
     let key = name.strip_prefix("KC_").unwrap_or(name);
     Some(match key {
-        "MS_U" | "MS_UP"             => Key::Mmv("MOVE_UP".into()),
-        "MS_D" | "MS_DOWN"           => Key::Mmv("MOVE_DOWN".into()),
-        "MS_L" | "MS_LEFT"           => Key::Mmv("MOVE_LEFT".into()),
-        "MS_R" | "MS_RIGHT"          => Key::Mmv("MOVE_RIGHT".into()),
-        "BTN1"                       => Key::Mkp("LCLK".into()),
-        "BTN2"                       => Key::Mkp("RCLK".into()),
-        "BTN3"                       => Key::Mkp("MCLK".into()),
-        "BTN4"                       => Key::Mkp("BTN4".into()),
-        "BTN5"                       => Key::Mkp("BTN5".into()),
-        "WH_U" | "MS_WH_UP"         => Key::Msc("SCRL_UP".into()),
-        "WH_D" | "MS_WH_DOWN"       => Key::Msc("SCRL_DOWN".into()),
-        "WH_L" | "MS_WH_LEFT"       => Key::Msc("SCRL_LEFT".into()),
-        "WH_R" | "MS_WH_RIGHT"      => Key::Msc("SCRL_RIGHT".into()),
+        "MS_U" | "MS_UP" => Key::Mmv("MOVE_UP".into()),
+        "MS_D" | "MS_DOWN" => Key::Mmv("MOVE_DOWN".into()),
+        "MS_L" | "MS_LEFT" => Key::Mmv("MOVE_LEFT".into()),
+        "MS_R" | "MS_RIGHT" => Key::Mmv("MOVE_RIGHT".into()),
+        "BTN1" => Key::Mkp("LCLK".into()),
+        "BTN2" => Key::Mkp("RCLK".into()),
+        "BTN3" => Key::Mkp("MCLK".into()),
+        "BTN4" => Key::Mkp("BTN4".into()),
+        "BTN5" => Key::Mkp("BTN5".into()),
+        "WH_U" | "MS_WH_UP" => Key::Msc("SCRL_UP".into()),
+        "WH_D" | "MS_WH_DOWN" => Key::Msc("SCRL_DOWN".into()),
+        "WH_L" | "MS_WH_LEFT" => Key::Msc("SCRL_LEFT".into()),
+        "WH_R" | "MS_WH_RIGHT" => Key::Msc("SCRL_RIGHT".into()),
         _ => return None,
     })
 }
@@ -516,10 +545,16 @@ fn extract_tap_dances(
     defines: &HashMap<String, String>,
     custom_keycodes: &HashSet<String>,
 ) -> Vec<TapDanceDef> {
-    let Some(pos) = s.find("tap_dance_actions") else { return vec![] };
+    let Some(pos) = s.find("tap_dance_actions") else {
+        return vec![];
+    };
     let after = &s[pos + "tap_dance_actions".len()..];
-    let Some(brace_rel) = after.find('{') else { return vec![] };
-    let Some(close) = find_matching(&after[brace_rel..], '{', '}') else { return vec![] };
+    let Some(brace_rel) = after.find('{') else {
+        return vec![];
+    };
+    let Some(close) = find_matching(&after[brace_rel..], '{', '}') else {
+        return vec![];
+    };
     let body = &after[brace_rel + 1..brace_rel + close];
 
     let mut tap_dances = Vec::new();
@@ -528,11 +563,15 @@ fn extract_tap_dances(
     while !search.is_empty() {
         let Some(br) = search.find('[') else { break };
         let after_open = &search[br + 1..];
-        let Some(cbr) = after_open.find(']') else { break };
+        let Some(cbr) = after_open.find(']') else {
+            break;
+        };
         let name = after_open[..cbr].trim().to_string();
 
         let after_close = &after_open[cbr + 1..];
-        let Some(eq) = after_close.find('=') else { break };
+        let Some(eq) = after_close.find('=') else {
+            break;
+        };
         let action_src = after_close[eq + 1..].trim_start();
 
         let bindings = parse_tap_dance_action(action_src, layer_map, defines, custom_keycodes);
@@ -560,10 +599,14 @@ fn parse_tap_dance_action(
     custom_keycodes: &HashSet<String>,
 ) -> Vec<Key> {
     let s = s.trim();
-    let Some(paren) = s.find('(') else { return vec![] };
+    let Some(paren) = s.find('(') else {
+        return vec![];
+    };
     let action_type = s[..paren].trim();
     let rest = &s[paren..];
-    let Some(close) = find_matching(rest, '(', ')') else { return vec![] };
+    let Some(close) = find_matching(rest, '(', ')') else {
+        return vec![];
+    };
     let args_str = &rest[1..close];
 
     if action_type == "ACTION_TAP_DANCE_DOUBLE" {
@@ -571,8 +614,20 @@ fn parse_tap_dance_action(
         if args.len() == 2 {
             let empty_td = HashMap::new();
             return vec![
-                parse_key_expr_str(args[0].trim(), layer_map, defines, custom_keycodes, &empty_td),
-                parse_key_expr_str(args[1].trim(), layer_map, defines, custom_keycodes, &empty_td),
+                parse_key_expr_str(
+                    args[0].trim(),
+                    layer_map,
+                    defines,
+                    custom_keycodes,
+                    &empty_td,
+                ),
+                parse_key_expr_str(
+                    args[1].trim(),
+                    layer_map,
+                    defines,
+                    custom_keycodes,
+                    &empty_td,
+                ),
             ];
         }
     }
@@ -609,7 +664,10 @@ mod tests {
     }
 
     fn defines(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
     }
 
     fn custom(names: &[&str]) -> HashSet<String> {
@@ -617,7 +675,13 @@ mod tests {
     }
 
     fn key(s: &str) -> Key {
-        parse_key_expr_str(s, &HashMap::new(), &HashMap::new(), &HashSet::new(), &HashMap::new())
+        parse_key_expr_str(
+            s,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        )
     }
 
     fn key_with(
@@ -720,21 +784,21 @@ mod tests {
     #[test]
     fn transparent_variants() {
         assert!(matches!(key("KC_TRANSPARENT"), Key::Trans));
-        assert!(matches!(key("KC_TRNS"),        Key::Trans));
-        assert!(matches!(key("_______"),         Key::Trans));
+        assert!(matches!(key("KC_TRNS"), Key::Trans));
+        assert!(matches!(key("_______"), Key::Trans));
     }
 
     #[test]
     fn none_variants() {
-        assert!(matches!(key("KC_NO"),   Key::None));
+        assert!(matches!(key("KC_NO"), Key::None));
         assert!(matches!(key("XXXXXXX"), Key::None));
     }
 
     #[test]
     fn special_behaviors() {
-        assert!(matches!(key("CW_TOGG"),  Key::CapsWord));
-        assert!(matches!(key("QK_BOOT"),  Key::Bootloader));
-        assert!(matches!(key("QK_RBT"),   Key::SysReset));
+        assert!(matches!(key("CW_TOGG"), Key::CapsWord));
+        assert!(matches!(key("QK_BOOT"), Key::Bootloader));
+        assert!(matches!(key("QK_RBT"), Key::SysReset));
     }
 
     #[test]
@@ -777,7 +841,12 @@ mod tests {
     #[test]
     fn layer_tap() {
         let lm = layer_map(&[("_LOWER", 1)]);
-        let key = key_with("LT(_LOWER, KC_SPACE)", &lm, &HashMap::new(), &HashSet::new());
+        let key = key_with(
+            "LT(_LOWER, KC_SPACE)",
+            &lm,
+            &HashMap::new(),
+            &HashSet::new(),
+        );
         assert!(matches!(key, Key::Lt(1, k) if k == "SPACE"));
     }
 
@@ -875,9 +944,21 @@ mod tests {
     fn tap_dance_resolved_when_in_map() {
         let td_map: HashMap<String, usize> =
             [("DANCE_0".to_string(), 0), ("DANCE_1".to_string(), 1)].into();
-        let k = parse_key_expr_str("TD(DANCE_0)", &HashMap::new(), &HashMap::new(), &HashSet::new(), &td_map);
+        let k = parse_key_expr_str(
+            "TD(DANCE_0)",
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashSet::new(),
+            &td_map,
+        );
         assert!(matches!(k, Key::TapDance(0)));
-        let k2 = parse_key_expr_str("TD(DANCE_1)", &HashMap::new(), &HashMap::new(), &HashSet::new(), &td_map);
+        let k2 = parse_key_expr_str(
+            "TD(DANCE_1)",
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashSet::new(),
+            &td_map,
+        );
         assert!(matches!(k2, Key::TapDance(1)));
     }
 
@@ -920,14 +1001,22 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         let km = parse(src).unwrap();
         assert_eq!(km.tap_dances.len(), 1);
         assert_eq!(km.tap_dances[0].name, "DANCE_0");
-        assert!(km.tap_dances[0].bindings.is_empty(), "fn_advanced should produce empty bindings");
+        assert!(
+            km.tap_dances[0].bindings.is_empty(),
+            "fn_advanced should produce empty bindings"
+        );
         assert!(matches!(&km.layers[0].keys[0], Key::TapDance(0)));
     }
 
     #[test]
     fn lm_is_unknown() {
         let lm = layer_map(&[("_LOWER", 1)]);
-        let k = key_with("LM(_LOWER, MOD_LSFT)", &lm, &HashMap::new(), &HashSet::new());
+        let k = key_with(
+            "LM(_LOWER, MOD_LSFT)",
+            &lm,
+            &HashMap::new(),
+            &HashSet::new(),
+        );
         assert!(matches!(k, Key::Unknown(s) if s.contains("LM")));
     }
 

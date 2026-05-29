@@ -18,7 +18,12 @@ pub fn render_json(keymap: &Keymap) -> String {
     let layers: Vec<Vec<String>> = keymap
         .layers
         .iter()
-        .map(|l| l.keys.iter().map(|k| key_to_qmk_str(k, tap_dances)).collect())
+        .map(|l| {
+            l.keys
+                .iter()
+                .map(|k| key_to_qmk_str(k, tap_dances))
+                .collect()
+        })
         .collect();
 
     // Build JSON manually to avoid pulling in a serialization derive on the output side.
@@ -84,7 +89,11 @@ pub fn render_c(keymap: &Keymap, cols_override: Option<usize>) -> String {
     for layer in &keymap.layers {
         let _ = writeln!(out, "    [{}] = {layout}(", layer_enum_name(&layer.name));
 
-        let rendered: Vec<String> = layer.keys.iter().map(|k| key_to_qmk_str(k, &keymap.tap_dances)).collect();
+        let rendered: Vec<String> = layer
+            .keys
+            .iter()
+            .map(|k| key_to_qmk_str(k, &keymap.tap_dances))
+            .collect();
         let col_width = rendered.iter().map(String::len).max().unwrap_or(6).min(20) + 1;
         let cols = cols_override.unwrap_or_else(|| infer_cols(layer.keys.len()));
 
@@ -122,32 +131,33 @@ fn render_c_macros(out: &mut String, keymap: &Keymap) {
 
 fn key_to_qmk_str(key: &Key, tap_dances: &[TapDanceDef]) -> String {
     match key {
-        Key::Trans         => "KC_TRNS".into(),
-        Key::None          => "KC_NO".into(),
-        Key::CapsWord      => "CW_TOGG".into(),
-        Key::Bootloader    => "QK_BOOT".into(),
-        Key::SysReset      => "QK_RBT".into(),
-        Key::Kp(zmk)       => codes::zmk_key_expr_to_qmk(zmk),
-        Key::Mo(n)         => format!("MO({n})"),
-        Key::Tog(n)        => format!("TG({n})"),
-        Key::Sk(m)         => format!("OSM({})", codes::zmk_mod_to_qmk(m)),
-        Key::Sl(n)         => format!("OSL({n})"),
-        Key::To(n)         => format!("TO({n})"),
-        Key::Df(n)         => format!("DF({n})"),
-        Key::Mmv(d)        => zmk_mmv_to_qmk(d),
-        Key::Mkp(b)        => zmk_mkp_to_qmk(b),
-        Key::Msc(d)        => zmk_msc_to_qmk(d),
-        Key::Lt(n, k)      => format!("LT({n},{})", codes::zmk_key_expr_to_qmk(k)),
-        Key::Mt(m, k)      => {
+        Key::Trans => "KC_TRNS".into(),
+        Key::None => "KC_NO".into(),
+        Key::CapsWord => "CW_TOGG".into(),
+        Key::Bootloader => "QK_BOOT".into(),
+        Key::SysReset => "QK_RBT".into(),
+        Key::Kp(zmk) => codes::zmk_key_expr_to_qmk(zmk),
+        Key::Mo(n) => format!("MO({n})"),
+        Key::Tog(n) => format!("TG({n})"),
+        Key::Sk(m) => format!("OSM({})", codes::zmk_mod_to_qmk(m)),
+        Key::Sl(n) => format!("OSL({n})"),
+        Key::To(n) => format!("TO({n})"),
+        Key::Df(n) => format!("DF({n})"),
+        Key::Mmv(d) => zmk_mmv_to_qmk(d),
+        Key::Mkp(b) => zmk_mkp_to_qmk(b),
+        Key::Msc(d) => zmk_msc_to_qmk(d),
+        Key::Lt(n, k) => format!("LT({n},{})", codes::zmk_key_expr_to_qmk(k)),
+        Key::Mt(m, k) => {
             let qm = codes::zmk_mod_to_qmk(m);
             format!("MT({qm},{})", codes::zmk_key_expr_to_qmk(k))
         }
-        Key::RgbUg(a)      => codes::zmk_rgb_to_qmk(a)
-                                   .map_or_else(|| format!("/* {a} */"), Into::into),
-        Key::Macro(name)   => name.clone(),
-        Key::TapDance(n)   => tap_dances.get(*n)
-            .map_or_else(|| format!("TD(DANCE_{n})"), |td| format!("TD({})", td.name.to_uppercase())),
-        Key::Unknown(s)    => format!("/* TODO: {s} */"),
+        Key::RgbUg(a) => codes::zmk_rgb_to_qmk(a).map_or_else(|| format!("/* {a} */"), Into::into),
+        Key::Macro(name) => name.clone(),
+        Key::TapDance(n) => tap_dances.get(*n).map_or_else(
+            || format!("TD(DANCE_{n})"),
+            |td| format!("TD({})", td.name.to_uppercase()),
+        ),
+        Key::Unknown(s) => format!("/* TODO: {s} */"),
     }
 }
 
@@ -174,9 +184,9 @@ fn render_c_tap_dances(out: &mut String, keymap: &Keymap) {
 
 fn zmk_mmv_to_qmk(dir: &str) -> String {
     match dir {
-        "MOVE_UP"    => "KC_MS_U".into(),
-        "MOVE_DOWN"  => "KC_MS_D".into(),
-        "MOVE_LEFT"  => "KC_MS_L".into(),
+        "MOVE_UP" => "KC_MS_U".into(),
+        "MOVE_DOWN" => "KC_MS_D".into(),
+        "MOVE_LEFT" => "KC_MS_L".into(),
         "MOVE_RIGHT" => "KC_MS_R".into(),
         _ => format!("/* mmv {dir} */"),
     }
@@ -195,18 +205,16 @@ fn zmk_mkp_to_qmk(btn: &str) -> String {
 
 fn zmk_msc_to_qmk(dir: &str) -> String {
     match dir {
-        "SCRL_UP"    => "KC_WH_U".into(),
-        "SCRL_DOWN"  => "KC_WH_D".into(),
-        "SCRL_LEFT"  => "KC_WH_L".into(),
+        "SCRL_UP" => "KC_WH_U".into(),
+        "SCRL_DOWN" => "KC_WH_D".into(),
+        "SCRL_LEFT" => "KC_WH_L".into(),
         "SCRL_RIGHT" => "KC_WH_R".into(),
         _ => format!("/* msc {dir} */"),
     }
 }
 
 fn layer_enum_name(zmk_name: &str) -> String {
-    let base = zmk_name
-        .trim_end_matches("_layer")
-        .trim_start_matches('_');
+    let base = zmk_name.trim_end_matches("_layer").trim_start_matches('_');
     if base.is_empty() {
         "_BASE".into()
     } else {
@@ -232,7 +240,11 @@ mod tests {
         Keymap {
             keyboard: None,
             layout: None,
-            layers: vec![Layer { name: "base_layer".into(), index: 0, keys }],
+            layers: vec![Layer {
+                name: "base_layer".into(),
+                index: 0,
+                keys,
+            }],
             macros: vec![],
             tap_dances: vec![],
             tri_layer: None,
@@ -270,11 +282,7 @@ mod tests {
 
     #[test]
     fn json_one_shot_and_to() {
-        let km = simple_keymap(vec![
-            Key::Sk("LSHFT".into()),
-            Key::Sl(1),
-            Key::To(0),
-        ]);
+        let km = simple_keymap(vec![Key::Sk("LSHFT".into()), Key::Sl(1), Key::To(0)]);
         let out = render_json(&km);
         assert!(out.contains(r#""OSM(MOD_LSFT)""#));
         assert!(out.contains(r#""OSL(1)""#));
@@ -339,15 +347,18 @@ mod tests {
 
     #[test]
     fn layer_enum_name_strips_layer_suffix() {
-        assert_eq!(layer_enum_name("base_layer"),   "_BASE");
-        assert_eq!(layer_enum_name("lower_layer"),  "_LOWER");
+        assert_eq!(layer_enum_name("base_layer"), "_BASE");
+        assert_eq!(layer_enum_name("lower_layer"), "_LOWER");
         assert_eq!(layer_enum_name("adjust_layer"), "_ADJUST");
-        assert_eq!(layer_enum_name("_BASE"),        "_BASE");
+        assert_eq!(layer_enum_name("_BASE"), "_BASE");
     }
 
     #[test]
     fn modifier_expr_converted() {
-        let km = simple_keymap(vec![Key::Kp("LC(C)".into()), Key::Kp("LG(LS(LBKT))".into())]);
+        let km = simple_keymap(vec![
+            Key::Kp("LC(C)".into()),
+            Key::Kp("LG(LS(LBKT))".into()),
+        ]);
         let out = render_json(&km);
         assert!(out.contains(r#""LCTL(KC_C)""#));
         assert!(out.contains(r#""LGUI(LSFT(KC_LBRC))""#));
@@ -401,7 +412,11 @@ mod tests {
         let mut km = simple_keymap(vec![Key::TapDance(0)]);
         km.tap_dances = vec![TapDanceDef {
             name: "dance_0".into(),
-            bindings: vec![Key::Kp("A".into()), Key::Kp("B".into()), Key::Kp("C".into())],
+            bindings: vec![
+                Key::Kp("A".into()),
+                Key::Kp("B".into()),
+                Key::Kp("C".into()),
+            ],
         }];
         let out = render_c(&km, None);
         assert!(out.contains("ACTION_TAP_DANCE_FN_ADVANCED"));

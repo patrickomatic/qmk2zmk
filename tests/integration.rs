@@ -25,7 +25,12 @@ fn layers_sorted_by_index() {
 fn planck_has_48_keys_per_layer() {
     let km = qmk_c::parse(KEYMAP_C).unwrap();
     for layer in &km.layers {
-        assert_eq!(layer.keys.len(), 48, "layer {} has wrong key count", layer.name);
+        assert_eq!(
+            layer.keys.len(),
+            48,
+            "layer {} has wrong key count",
+            layer.name
+        );
     }
 }
 
@@ -59,8 +64,14 @@ fn base_layer_lower_raise_resolve_to_mo() {
     let km = qmk_c::parse(KEYMAP_C).unwrap();
     let base = km.layers.iter().find(|l| l.name == "_BASE").unwrap();
     // Bottom row: LOWER at col 4, RAISE at col 7
-    assert!(matches!(&base.keys[40], Key::Mo(1)), "LOWER should be &mo 1");
-    assert!(matches!(&base.keys[43], Key::Mo(2)), "RAISE should be &mo 2");
+    assert!(
+        matches!(&base.keys[40], Key::Mo(1)),
+        "LOWER should be &mo 1"
+    );
+    assert!(
+        matches!(&base.keys[43], Key::Mo(2)),
+        "RAISE should be &mo 2"
+    );
 }
 
 #[test]
@@ -162,7 +173,12 @@ fn zmk_layers_named_correctly() {
 fn zmk_has_48_keys_per_layer() {
     let km = zmk::parse::parse(ZMK_KEYMAP).unwrap();
     for layer in &km.layers {
-        assert_eq!(layer.keys.len(), 48, "layer {} has wrong key count", layer.name);
+        assert_eq!(
+            layer.keys.len(),
+            48,
+            "layer {} has wrong key count",
+            layer.name
+        );
     }
 }
 
@@ -194,8 +210,14 @@ fn zmk_base_layer_has_home_row_mods() {
 fn zmk_base_layer_has_mo_keys() {
     let km = zmk::parse::parse(ZMK_KEYMAP).unwrap();
     let base = &km.layers[0];
-    assert!(matches!(&base.keys[40], Key::Mo(1)), "col 4 of bottom row should be mo 1");
-    assert!(matches!(&base.keys[43], Key::Mo(2)), "col 7 of bottom row should be mo 2");
+    assert!(
+        matches!(&base.keys[40], Key::Mo(1)),
+        "col 4 of bottom row should be mo 1"
+    );
+    assert!(
+        matches!(&base.keys[43], Key::Mo(2)),
+        "col 7 of bottom row should be mo 2"
+    );
 }
 
 #[test]
@@ -323,7 +345,10 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     let pass1 = zmk::render(&km, None);
     let km2 = zmk::parse::parse(&pass1).unwrap();
     let pass2 = zmk::render(&km2, None);
-    assert_eq!(pass1, pass2, "ZMK render from QMK source must stabilize after one re-parse");
+    assert_eq!(
+        pass1, pass2,
+        "ZMK render from QMK source must stabilize after one re-parse"
+    );
 }
 
 /// QMK C → ZMK → parse: key bindings must be preserved for every layer that
@@ -335,14 +360,19 @@ fn qmk_c_to_zmk_preserves_all_keys() {
     let zmk_str = zmk::render(&km1, None);
     let km2 = zmk::parse::parse(&zmk_str).unwrap();
 
-    assert_eq!(km1.layers.len(), km2.layers.len(), "layer count must survive QMK→ZMK");
+    assert_eq!(
+        km1.layers.len(),
+        km2.layers.len(),
+        "layer count must survive QMK→ZMK"
+    );
     for (l1, l2) in km1.layers.iter().zip(km2.layers.iter()) {
         if l1.keys.iter().any(|k| matches!(k, Key::Unknown(_))) {
             continue; // unknown keys become block comments that vanish on re-parse
         }
         assert_eq!(
             l1.keys, l2.keys,
-            "layer {} keys must survive QMK→ZMK round-trip", l1.name
+            "layer {} keys must survive QMK→ZMK round-trip",
+            l1.name
         );
     }
 }

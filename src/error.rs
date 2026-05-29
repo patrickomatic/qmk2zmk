@@ -4,10 +4,21 @@ use std::path::PathBuf;
 /// Top-level application error, caught in `main`.
 #[derive(Debug)]
 pub enum Error {
-    ReadFile { path: PathBuf, source: std::io::Error },
-    WriteFile { path: PathBuf, source: std::io::Error },
+    /// Failed to read the requested input file.
+    ReadFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// Failed to write the requested output file.
+    WriteFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// Failed to parse a QMK C `keymap.c` source file.
     ParseC(ParseCError),
+    /// Failed to parse QMK Configurator JSON.
     ParseJson(serde_json::Error),
+    /// Failed to parse a ZMK `.keymap` DTS overlay.
     ParseZmk(ParseZmkError),
 }
 
@@ -55,32 +66,45 @@ impl From<ParseZmkError> for Error {
 /// Structured errors from the C keymap parser.
 #[derive(Debug, PartialEq)]
 pub enum ParseCError {
+    /// The source did not contain a `keymaps` array.
     NoKeymapsArray,
+    /// The `keymaps` array did not have an opening `{`.
     NoKeymapsBrace,
+    /// The `keymaps` array opened but did not close.
     UnmatchedKeymapsBrace,
+    /// A layer entry started with `[` but did not close with `]`.
     UnclosedLayerBracket,
+    /// A layer entry did not have `=` after the layer name.
     MissingEquals { layer: String },
+    /// A layer's layout macro was missing its opening `(`.
     MissingLayoutParen { layer: String },
+    /// A layer's layout macro opened but did not close.
     UnmatchedLayoutParen { layer: String },
 }
 
 impl fmt::Display for ParseCError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ParseCError::NoKeymapsArray =>
-                write!(f, "no keymaps array found — expected 'const uint16_t PROGMEM keymaps'"),
-            ParseCError::NoKeymapsBrace =>
-                write!(f, "keymaps array is missing its opening brace"),
-            ParseCError::UnmatchedKeymapsBrace =>
-                write!(f, "keymaps array brace is never closed"),
-            ParseCError::UnclosedLayerBracket =>
-                write!(f, "unclosed '[' while scanning layer entries"),
-            ParseCError::MissingEquals { layer } =>
-                write!(f, "layer '{layer}': expected '=' after name"),
-            ParseCError::MissingLayoutParen { layer } =>
-                write!(f, "layer '{layer}': LAYOUT macro is missing its opening '('"),
-            ParseCError::UnmatchedLayoutParen { layer } =>
-                write!(f, "layer '{layer}': LAYOUT macro parenthesis is never closed"),
+            ParseCError::NoKeymapsArray => write!(
+                f,
+                "no keymaps array found — expected 'const uint16_t PROGMEM keymaps'"
+            ),
+            ParseCError::NoKeymapsBrace => write!(f, "keymaps array is missing its opening brace"),
+            ParseCError::UnmatchedKeymapsBrace => write!(f, "keymaps array brace is never closed"),
+            ParseCError::UnclosedLayerBracket => {
+                write!(f, "unclosed '[' while scanning layer entries")
+            }
+            ParseCError::MissingEquals { layer } => {
+                write!(f, "layer '{layer}': expected '=' after name")
+            }
+            ParseCError::MissingLayoutParen { layer } => write!(
+                f,
+                "layer '{layer}': LAYOUT macro is missing its opening '('"
+            ),
+            ParseCError::UnmatchedLayoutParen { layer } => write!(
+                f,
+                "layer '{layer}': LAYOUT macro parenthesis is never closed"
+            ),
         }
     }
 }
@@ -90,17 +114,20 @@ impl std::error::Error for ParseCError {}
 /// Structured errors from the ZMK keymap parser.
 #[derive(Debug, PartialEq)]
 pub enum ParseZmkError {
+    /// The source did not contain a DTS `keymap { ... }` block.
     NoKeymapBlock,
+    /// A named DTS block opened but did not close.
     UnclosedBlock { context: String },
 }
 
 impl fmt::Display for ParseZmkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ParseZmkError::NoKeymapBlock =>
-                write!(f, "no keymap {{ }} block found — is this a ZMK .keymap file?"),
-            ParseZmkError::UnclosedBlock { context } =>
-                write!(f, "unclosed block in '{context}'"),
+            ParseZmkError::NoKeymapBlock => write!(
+                f,
+                "no keymap {{ }} block found — is this a ZMK .keymap file?"
+            ),
+            ParseZmkError::UnclosedBlock { context } => write!(f, "unclosed block in '{context}'"),
         }
     }
 }

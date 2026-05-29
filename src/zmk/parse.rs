@@ -21,7 +21,14 @@ pub fn parse(source: &str) -> Result<Keymap, ParseZmkError> {
         .collect();
     let keymap_body = block_content(&s, "keymap").ok_or(ParseZmkError::NoKeymapBlock)?;
     let layers = extract_layers(keymap_body, &macro_names, &tap_dance_labels)?;
-    Ok(Keymap { keyboard: None, layout: None, layers, macros, tap_dances, tri_layer })
+    Ok(Keymap {
+        keyboard: None,
+        layout: None,
+        layers,
+        macros,
+        tap_dances,
+        tri_layer,
+    })
 }
 
 fn strip_comments(s: &str) -> String {
@@ -31,7 +38,10 @@ fn strip_comments(s: &str) -> String {
         if c == '/' {
             if chars.peek() == Some(&'/') {
                 for c2 in chars.by_ref() {
-                    if c2 == '\n' { out.push('\n'); break; }
+                    if c2 == '\n' {
+                        out.push('\n');
+                        break;
+                    }
                 }
             } else if chars.peek() == Some(&'*') {
                 chars.next();
@@ -61,8 +71,14 @@ fn block_content<'a>(s: &'a str, name: &str) -> Option<&'a str> {
         pos = after_name;
 
         let prev_ok = found == 0
-            || s[..found].chars().last().is_none_or(|c| !c.is_alphanumeric() && c != '_');
-        let next_ok = s[after_name..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_');
+            || s[..found]
+                .chars()
+                .last()
+                .is_none_or(|c| !c.is_alphanumeric() && c != '_');
+        let next_ok = s[after_name..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric() && c != '_');
         if !prev_ok || !next_ok {
             continue;
         }
@@ -118,24 +134,35 @@ fn extract_tri_layer(s: &str) -> Option<TriLayer> {
     let close2 = after_then[open2..].find('>')?;
     let tri: usize = after_then[open2 + 1..open2 + close2].trim().parse().ok()?;
 
-    Some(TriLayer { lower: nums[0], upper: nums[1], tri })
+    Some(TriLayer {
+        lower: nums[0],
+        upper: nums[1],
+        tri,
+    })
 }
 
 fn extract_macros(s: &str) -> Vec<MacroDef> {
-    let Some(content) = block_content(s, "macros") else { return vec![] };
+    let Some(content) = block_content(s, "macros") else {
+        return vec![];
+    };
     let mut macros = Vec::new();
     let mut pos = 0;
     while let Some(brace_rel) = content[pos..].find('{') {
         let brace_pos = pos + brace_rel;
         let name = identifier_before(content, brace_pos);
-        let Some(close) = find_matching(&content[brace_pos..], '{', '}') else { break };
+        let Some(close) = find_matching(&content[brace_pos..], '{', '}') else {
+            break;
+        };
         let block = &content[brace_pos + 1..brace_pos + close];
         pos = brace_pos + close + 1;
         if name.is_empty() {
             continue;
         }
         let steps = parse_macro_steps(bindings_str(block).unwrap_or(""));
-        macros.push(MacroDef { name: name.to_string(), steps });
+        macros.push(MacroDef {
+            name: name.to_string(),
+            steps,
+        });
     }
     macros
 }
@@ -173,7 +200,11 @@ fn extract_layers(
         let name = identifier_before(s, brace_pos);
         let Some(close) = find_matching(&s[brace_pos..], '{', '}') else {
             return Err(ParseZmkError::UnclosedBlock {
-                context: if name.is_empty() { "keymap".into() } else { name.to_string() },
+                context: if name.is_empty() {
+                    "keymap".into()
+                } else {
+                    name.to_string()
+                },
             });
         };
         let block = &s[brace_pos + 1..brace_pos + close];
@@ -181,10 +212,18 @@ fn extract_layers(
         if !block.contains("bindings") {
             continue;
         }
-        let keys = parse_binding_list(bindings_str(block).unwrap_or(""), macro_names, tap_dance_labels);
+        let keys = parse_binding_list(
+            bindings_str(block).unwrap_or(""),
+            macro_names,
+            tap_dance_labels,
+        );
         let idx = layers.len();
         layers.push(Layer {
-            name: if name.is_empty() { format!("layer{idx}") } else { name.to_string() },
+            name: if name.is_empty() {
+                format!("layer{idx}")
+            } else {
+                name.to_string()
+            },
             index: idx,
             keys,
         });
@@ -210,7 +249,11 @@ fn parse_binding_list(
         .skip(1)
         .filter_map(|chunk| {
             let tokens: Vec<&str> = chunk.split_whitespace().collect();
-            if tokens.is_empty() { None } else { Some(binding_to_key(&tokens, macro_names, tap_dance_labels)) }
+            if tokens.is_empty() {
+                None
+            } else {
+                Some(binding_to_key(&tokens, macro_names, tap_dance_labels))
+            }
         })
         .collect()
 }
@@ -221,11 +264,11 @@ fn binding_to_key(
     tap_dance_labels: &HashMap<&str, usize>,
 ) -> Key {
     match tokens[0] {
-        "kp" => tokens.get(1).map_or(
-            Key::Unknown("kp".into()),
-            |k| Key::Kp((*k).to_string()),
-        ),
-        "mo" => tokens.get(1)
+        "kp" => tokens
+            .get(1)
+            .map_or(Key::Unknown("kp".into()), |k| Key::Kp((*k).to_string())),
+        "mo" => tokens
+            .get(1)
             .and_then(|n| n.parse().ok())
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Mo),
         "lt" => {
@@ -245,41 +288,39 @@ fn binding_to_key(
                 Key::Unknown(tokens.join(" "))
             }
         }
-        "tog" => tokens.get(1)
+        "tog" => tokens
+            .get(1)
             .and_then(|n| n.parse().ok())
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Tog),
-        "sk" => tokens.get(1).map_or(
-            Key::Unknown("sk".into()),
-            |m| Key::Sk((*m).to_string()),
-        ),
-        "sl" => tokens.get(1)
+        "sk" => tokens
+            .get(1)
+            .map_or(Key::Unknown("sk".into()), |m| Key::Sk((*m).to_string())),
+        "sl" => tokens
+            .get(1)
             .and_then(|n| n.parse().ok())
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Sl),
-        "to" => tokens.get(1)
+        "to" => tokens
+            .get(1)
             .and_then(|n| n.parse().ok())
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Df),
-        "mmv" => tokens.get(1).map_or(
-            Key::Unknown("mmv".into()),
-            |d| Key::Mmv((*d).to_string()),
-        ),
-        "mkp" => tokens.get(1).map_or(
-            Key::Unknown("mkp".into()),
-            |b| Key::Mkp((*b).to_string()),
-        ),
-        "msc" => tokens.get(1).map_or(
-            Key::Unknown("msc".into()),
-            |d| Key::Msc((*d).to_string()),
-        ),
+        "mmv" => tokens
+            .get(1)
+            .map_or(Key::Unknown("mmv".into()), |d| Key::Mmv((*d).to_string())),
+        "mkp" => tokens
+            .get(1)
+            .map_or(Key::Unknown("mkp".into()), |b| Key::Mkp((*b).to_string())),
+        "msc" => tokens
+            .get(1)
+            .map_or(Key::Unknown("msc".into()), |d| Key::Msc((*d).to_string())),
         "bt" | "out" => Key::Unknown(format!("&{}", tokens.join(" "))),
-        "trans"      => Key::Trans,
-        "none"       => Key::None,
-        "caps_word"  => Key::CapsWord,
+        "trans" => Key::Trans,
+        "none" => Key::None,
+        "caps_word" => Key::CapsWord,
         "bootloader" => Key::Bootloader,
-        "sys_reset"  => Key::SysReset,
-        "rgb_ug" => tokens.get(1).map_or(
-            Key::Unknown("rgb_ug".into()),
-            |a| Key::RgbUg((*a).to_string()),
-        ),
+        "sys_reset" => Key::SysReset,
+        "rgb_ug" => tokens.get(1).map_or(Key::Unknown("rgb_ug".into()), |a| {
+            Key::RgbUg((*a).to_string())
+        }),
         name if tap_dance_labels.contains_key(name) => Key::TapDance(tap_dance_labels[name]),
         name if macro_names.contains(name) => Key::Macro(name.to_string()),
         _ => Key::Unknown(format!("&{}", tokens.join(" "))),
@@ -289,12 +330,16 @@ fn binding_to_key(
 // ── Behaviors block (tap dance) ───────────────────────────────────────────────
 
 fn extract_behaviors_tap_dances(s: &str, macro_names: &HashSet<&str>) -> Vec<TapDanceDef> {
-    let Some(content) = block_content(s, "behaviors") else { return vec![] };
+    let Some(content) = block_content(s, "behaviors") else {
+        return vec![];
+    };
     let mut tap_dances = Vec::new();
     let mut pos = 0;
     while let Some(brace_rel) = content[pos..].find('{') {
         let brace_pos = pos + brace_rel;
-        let Some(close) = find_matching(&content[brace_pos..], '{', '}') else { break };
+        let Some(close) = find_matching(&content[brace_pos..], '{', '}') else {
+            break;
+        };
         let block_body = &content[brace_pos + 1..brace_pos + close];
         pos = brace_pos + close + 1;
         if !block_body.contains("zmk,behavior-tap-dance") {
@@ -302,7 +347,10 @@ fn extract_behaviors_tap_dances(s: &str, macro_names: &HashSet<&str>) -> Vec<Tap
         }
         let label = label_before_brace(content, brace_pos);
         let bindings = tap_dance_binding_list(block_body, macro_names);
-        tap_dances.push(TapDanceDef { name: label.to_string(), bindings });
+        tap_dances.push(TapDanceDef {
+            name: label.to_string(),
+            bindings,
+        });
     }
     tap_dances
 }
@@ -325,7 +373,9 @@ fn label_before_brace(s: &str, brace_pos: usize) -> &str {
 /// Parse the tap-dance `bindings = <&foo X>, <&bar Y>;` line in a behavior
 /// block.  Each `<…>` group is a single binding.
 fn tap_dance_binding_list(block: &str, macro_names: &HashSet<&str>) -> Vec<Key> {
-    let Some(start) = block.find("bindings") else { return vec![] };
+    let Some(start) = block.find("bindings") else {
+        return vec![];
+    };
     let after_kw = &block[start + "bindings".len()..];
     let semi_end = after_kw.find(';').unwrap_or(after_kw.len());
     let region = &after_kw[..semi_end];
@@ -335,7 +385,9 @@ fn tap_dance_binding_list(block: &str, macro_names: &HashSet<&str>) -> Vec<Key> 
     let mut pos = 0;
     while let Some(open_rel) = region[pos..].find('<') {
         let open = pos + open_rel + 1;
-        let Some(close_rel) = region[open..].find('>') else { break };
+        let Some(close_rel) = region[open..].find('>') else {
+            break;
+        };
         let inner = &region[open..open + close_rel];
         if let Some(after_amp) = inner.split('&').nth(1) {
             let tokens: Vec<&str> = after_amp.split_whitespace().collect();

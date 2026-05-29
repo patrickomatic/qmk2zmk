@@ -30,7 +30,15 @@ pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
                 index: i,
                 keys: keys
                     .iter()
-                    .map(|k| super::parse_c::parse_key_expr_str(k, &layer_map, &defines, &custom_keycodes, &tap_dance_map))
+                    .map(|k| {
+                        super::parse_c::parse_key_expr_str(
+                            k,
+                            &layer_map,
+                            &defines,
+                            &custom_keycodes,
+                            &tap_dance_map,
+                        )
+                    })
                     .collect(),
             }
         })

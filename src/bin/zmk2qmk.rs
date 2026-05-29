@@ -73,10 +73,12 @@ fn run() -> Result<(), Error> {
         qmk2zmk::warn_unknowns(&keymap);
     }
 
-    let cols = cli.cols.or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
+    let cols = cli
+        .cols
+        .or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
     let output = match cli.format {
         OutputFormat::Json => qmk::render_json(&keymap),
-        OutputFormat::C    => qmk::render_c(&keymap, cols),
+        OutputFormat::C => qmk::render_c(&keymap, cols),
     };
 
     io::write_output(&output, cli.output.as_deref())
