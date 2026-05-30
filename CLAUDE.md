@@ -60,6 +60,10 @@ Add a test for every new parser feature or key mapping. Integration tests should
 1. Bump `version` in `Cargo.toml`.
 2. Run `make release` — this runs tests and clippy, commits and pushes the version bump, creates and pushes a `vX.Y.Z` git tag (triggering the CI release workflow to build platform binaries and create a GitHub Release), then publishes the crate to crates.io.
 
+When asked to bump a version and push a release manually, do not stop after
+committing and pushing `main`. Create and push the matching `vX.Y.Z` tag, then
+check the GitHub Actions release workflow and report whether it completed.
+
 ## Key mapping conventions
 
 QMK and ZMK use different names for the same physical keys. The canonical mapping lives in `src/codes.rs`. Notable differences:
