@@ -1,13 +1,33 @@
+//! Command-line entry point for converting QMK keymaps to ZMK overlays.
+//!
+//! This binary owns CLI parsing, format detection, warnings, and output routing.
+//! Parsing and rendering stay in the library so they are testable without
+//! spawning a process.
+
 use clap::{Parser, ValueEnum};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use qmk2zmk::error::Error;
 use qmk2zmk::{codes, io, qmk, zmk};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum InputFormat {
+    /// QMK `keymap.c` source.
     C,
+    /// QMK Configurator JSON export.
     Json,
+}
+
+impl TryFrom<&Path> for InputFormat {
+    type Error = ();
+
+    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("c") => Ok(InputFormat::C),
+            Some("json") => Ok(InputFormat::Json),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Parser)]
@@ -42,12 +62,17 @@ struct Cli {
     no_warn: bool,
 }
 
+/// Process exit boundary for the binary.
+///
+/// All fallible work happens in [`run`] so errors can be returned and printed by
+/// the shared reporting function.
 fn main() {
     if let Err(ref e) = run() {
         qmk2zmk::report_and_exit(e);
     }
 }
 
+/// Parse CLI arguments, perform the conversion, and write output.
 fn run() -> Result<(), Error> {
     let cli = Cli::parse();
 
@@ -58,22 +83,18 @@ fn run() -> Result<(), Error> {
 
     let input = cli.input.expect("required_unless_present = list_keyboards");
 
-    let format = cli
-        .format
-        .unwrap_or_else(|| match input.extension().and_then(|e| e.to_str()) {
-            Some("c") => InputFormat::C,
-            Some("json") => InputFormat::Json,
-            _ => {
-                eprintln!("warning: cannot detect format from extension, assuming C");
-                InputFormat::C
-            }
-        });
+    let format = cli.format.unwrap_or_else(|| {
+        InputFormat::try_from(input.as_path()).unwrap_or_else(|()| {
+            eprintln!("warning: cannot detect format from extension, assuming C");
+            InputFormat::C
+        })
+    });
 
     let source = io::read_input(&input)?;
 
     let keymap = match format {
-        InputFormat::C => qmk::parse_c::parse(&source).map_err(Error::ParseC)?,
-        InputFormat::Json => qmk::parse_json::parse(&source).map_err(Error::ParseJson)?,
+        InputFormat::C => qmk::parse_c::parse(&source)?,
+        InputFormat::Json => qmk::parse_json::parse(&source)?,
     };
 
     if !cli.no_warn {
@@ -87,6 +108,7 @@ fn run() -> Result<(), Error> {
     io::write_output(&output, cli.output.as_deref())
 }
 
+/// Print the built-in keyboard column heuristics used by `--keyboard`.
 fn print_keyboard_list() {
     println!("{:<14} Columns", "Keyboard");
     for (name, cols) in codes::KNOWN_KEYBOARDS {

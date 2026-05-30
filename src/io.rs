@@ -1,3 +1,10 @@
+//! Shared filesystem I/O helpers for both binaries.
+//!
+//! The command-line entry points do format detection and conversion orchestration,
+//! but file access is kept here so both directions produce the same structured
+//! [`crate::error::Error`] variants for read and write failures. Passing `None`
+//! to [`write_output`] is the only stdout path.
+
 use std::path::Path;
 
 use crate::error::Error;

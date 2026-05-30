@@ -1,17 +1,32 @@
+//! Structured error types for parser and I/O failures.
+//!
+//! The binaries print errors only at the outer `main` boundary through
+//! [`crate::report_and_exit`]. Everything below that boundary returns one of
+//! these types, which keeps parse failures testable and prevents library code
+//! from deciding how an application should report or exit.
+
 use std::fmt;
 use std::path::PathBuf;
 
-/// Top-level application error, caught in `main`.
+/// Top-level application error returned by binary `run()` functions.
+///
+/// This enum groups I/O errors and format-specific parser errors so the
+/// command-line binaries can use a single `Result<(), Error>` signature while
+/// still preserving source errors for diagnostic chains.
 #[derive(Debug)]
 pub enum Error {
     /// Failed to read the requested input file.
     ReadFile {
+        /// Path the user asked the binary to read.
         path: PathBuf,
+        /// Original filesystem error.
         source: std::io::Error,
     },
     /// Failed to write the requested output file.
     WriteFile {
+        /// Path the user asked the binary to write.
         path: PathBuf,
+        /// Original filesystem error.
         source: std::io::Error,
     },
     /// Failed to parse a QMK C `keymap.c` source file.
@@ -63,7 +78,11 @@ impl From<ParseZmkError> for Error {
     }
 }
 
-/// Structured errors from the C keymap parser.
+/// Structured errors from the QMK C keymap parser.
+///
+/// The C parser intentionally distinguishes missing top-level input from
+/// malformed layer entries. That gives tests and callers precise failure modes
+/// without relying on substring matching in generic error messages.
 #[derive(Debug, PartialEq)]
 pub enum ParseCError {
     /// The source did not contain a `keymaps` array.
@@ -75,11 +94,20 @@ pub enum ParseCError {
     /// A layer entry started with `[` but did not close with `]`.
     UnclosedLayerBracket,
     /// A layer entry did not have `=` after the layer name.
-    MissingEquals { layer: String },
+    MissingEquals {
+        /// Layer designator being parsed when the `=` was expected.
+        layer: String,
+    },
     /// A layer's layout macro was missing its opening `(`.
-    MissingLayoutParen { layer: String },
+    MissingLayoutParen {
+        /// Layer designator whose `LAYOUT...` initializer is malformed.
+        layer: String,
+    },
     /// A layer's layout macro opened but did not close.
-    UnmatchedLayoutParen { layer: String },
+    UnmatchedLayoutParen {
+        /// Layer designator whose layout macro call never closed.
+        layer: String,
+    },
 }
 
 impl fmt::Display for ParseCError {
@@ -112,12 +140,19 @@ impl fmt::Display for ParseCError {
 impl std::error::Error for ParseCError {}
 
 /// Structured errors from the ZMK keymap parser.
+///
+/// ZMK input is DTS overlay syntax. The parser is intentionally lightweight, so
+/// these variants focus on the structural issues it must understand: finding the
+/// `keymap` node and matching braces for nested blocks.
 #[derive(Debug, PartialEq)]
 pub enum ParseZmkError {
     /// The source did not contain a DTS `keymap { ... }` block.
     NoKeymapBlock,
     /// A named DTS block opened but did not close.
-    UnclosedBlock { context: String },
+    UnclosedBlock {
+        /// Best-effort name of the block that was open when parsing failed.
+        context: String,
+    },
 }
 
 impl fmt::Display for ParseZmkError {

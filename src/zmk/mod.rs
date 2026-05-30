@@ -1,3 +1,10 @@
+//! ZMK renderer and parser.
+//!
+//! Rendering turns the shared IR into a `.keymap` DTS overlay with only the
+//! includes and behavior blocks needed by the current keymap. Parsing performs
+//! the reverse operation in [`parse`], preserving unsupported bindings as
+//! [`crate::ir::Key::Unknown`] so conversion can continue.
+
 pub mod parse;
 
 use std::collections::HashSet;
@@ -6,6 +13,12 @@ use std::fmt::Write as _;
 use crate::codes;
 use crate::ir::{Key, Keymap, MacroStep, TriLayer};
 
+/// Render a [`Keymap`] as a ZMK `.keymap` DTS overlay.
+///
+/// The renderer emits conditional layers, tap dances, macros, and optional RGB
+/// or mouse includes only when the IR contains those features. `cols` controls
+/// line wrapping of the bindings for readability; it does not change the keymap
+/// semantics.
 #[must_use]
 pub fn render(keymap: &Keymap, cols: Option<usize>) -> String {
     let mut out = String::new();
@@ -57,6 +70,11 @@ fn render_conditional_layers(out: &mut String, tri: &TriLayer) {
     out.push_str("    };\n\n");
 }
 
+/// Emit ZMK macro behavior nodes.
+///
+/// Fully parsed macros use their recorded steps. Macro references without a
+/// parsed definition still get a stub so layer bindings have a target node the
+/// user can fill in.
 fn render_macros(out: &mut String, keymap: &Keymap) {
     out.push_str("    macros {\n");
 
@@ -102,6 +120,10 @@ fn render_macros(out: &mut String, keymap: &Keymap) {
     out.push_str("    };\n\n");
 }
 
+/// Emit the ZMK `keymap` node and all layer binding lists.
+///
+/// Bindings are padded into columns for readability. The column count does not
+/// affect generated DTS semantics.
 fn render_keymap(out: &mut String, keymap: &Keymap, cols_override: Option<usize>) {
     out.push_str("    keymap {\n");
     out.push_str("        compatible = \"zmk,keymap\";\n\n");
@@ -141,6 +163,7 @@ fn render_keymap(out: &mut String, keymap: &Keymap, cols_override: Option<usize>
     out.push_str("    };\n");
 }
 
+/// Render one IR key as a ZMK behavior binding.
 fn render_key(key: &Key) -> String {
     match key {
         Key::Kp(k) => format!("&kp {k}"),
@@ -166,6 +189,7 @@ fn render_key(key: &Key) -> String {
     }
 }
 
+/// Emit ZMK tap-dance behavior nodes for every tap dance in the IR.
 fn render_behaviors(out: &mut String, keymap: &Keymap) {
     out.push_str("    behaviors {\n");
     for (i, td) in keymap.tap_dances.iter().enumerate() {
@@ -189,10 +213,15 @@ fn render_behaviors(out: &mut String, keymap: &Keymap) {
     out.push_str("    };\n\n");
 }
 
+/// Return whether the output needs a `behaviors` block for tap dances.
 fn has_tap_dances(keymap: &Keymap) -> bool {
     !keymap.tap_dances.is_empty()
 }
 
+/// Convert a source layer name into a ZMK layer node label.
+///
+/// QMK-style `_BASE` becomes `base_layer`; names already ending in `_layer` keep
+/// that suffix instead of receiving it twice.
 fn layer_label(name: &str) -> String {
     let base = name
         .trim_start_matches('_')
@@ -205,6 +234,10 @@ fn layer_label(name: &str) -> String {
     }
 }
 
+/// Choose the binding wrap width for rendered ZMK layers.
+///
+/// Explicit CLI input wins, then known keyboard/layout names, then a simple
+/// divisibility heuristic based on the first layer's key count.
 fn infer_cols(keymap: &Keymap, override_cols: Option<usize>) -> usize {
     if let Some(n) = override_cols {
         return n;
@@ -226,6 +259,7 @@ fn infer_cols(keymap: &Keymap, override_cols: Option<usize>) -> usize {
     12
 }
 
+/// Return whether any binding requires ZMK RGB binding definitions.
 fn uses_rgb(keymap: &Keymap) -> bool {
     keymap
         .layers
@@ -234,6 +268,7 @@ fn uses_rgb(keymap: &Keymap) -> bool {
         .any(|k| matches!(k, Key::RgbUg(_)))
 }
 
+/// Return whether any binding requires ZMK mouse binding definitions.
 fn uses_mouse(keymap: &Keymap) -> bool {
     keymap
         .layers
@@ -242,6 +277,7 @@ fn uses_mouse(keymap: &Keymap) -> bool {
         .any(|k| matches!(k, Key::Mmv(_) | Key::Mkp(_) | Key::Msc(_)))
 }
 
+/// Return whether the output needs a top-level ZMK `macros` block.
 fn has_macros(keymap: &Keymap) -> bool {
     !keymap.macros.is_empty()
         || keymap

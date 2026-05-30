@@ -1,3 +1,11 @@
+//! QMK renderers and parsers.
+//!
+//! The `parse_*` submodules translate QMK inputs into the shared IR. The
+//! renderers in this module perform the reverse operation, writing either QMK
+//! Configurator JSON or a compilable starter `keymap.c`. Unsupported bindings
+//! are preserved as comments where possible so users can repair the generated
+//! output instead of losing information silently.
+
 pub mod parse_c;
 pub mod parse_json;
 
@@ -8,7 +16,9 @@ use crate::ir::{Key, Keymap, TapDanceDef};
 
 /// Render a `Keymap` as a QMK Configurator JSON string.
 ///
-/// Unknown keys are left as their ZMK names so the output is still diff-able.
+/// The output keeps the original keyboard and layout metadata when the IR has
+/// it. Unknown keys are left as their ZMK names so the output is still
+/// inspectable and diff-able.
 #[must_use]
 pub fn render_json(keymap: &Keymap) -> String {
     let keyboard = keymap.keyboard.as_deref().unwrap_or("unknown");
@@ -59,7 +69,9 @@ pub fn render_json(keymap: &Keymap) -> String {
 /// Render a `Keymap` as a QMK `keymap.c` source file.
 ///
 /// The LAYOUT macro name defaults to `LAYOUT`; pass a custom name via
-/// [`Keymap::layout`] if you know the keyboard's actual macro name.
+/// [`Keymap::layout`] if you know the keyboard's actual macro name. Column
+/// layout is for readability only; QMK ultimately consumes the flat argument
+/// list inside the selected layout macro.
 #[must_use]
 pub fn render_c(keymap: &Keymap, cols_override: Option<usize>) -> String {
     let layout = keymap.layout.as_deref().unwrap_or("LAYOUT");
@@ -129,6 +141,10 @@ fn render_c_macros(out: &mut String, keymap: &Keymap) {
     out.push_str("}\n\n");
 }
 
+/// Render one IR key as a QMK keycode or key expression.
+///
+/// Unsupported or lossy bindings are emitted as C comments so the generated file
+/// remains reviewable and does not silently replace behavior with `KC_NO`.
 fn key_to_qmk_str(key: &Key, tap_dances: &[TapDanceDef]) -> String {
     match key {
         Key::Trans => "KC_TRNS".into(),
@@ -161,6 +177,10 @@ fn key_to_qmk_str(key: &Key, tap_dances: &[TapDanceDef]) -> String {
     }
 }
 
+/// Emit QMK tap-dance declarations for tap-dance definitions in the IR.
+///
+/// Two-binding tap dances can use QMK's simple double-tap helper. More complex
+/// definitions need user code, so the renderer emits an advanced action stub.
 fn render_c_tap_dances(out: &mut String, keymap: &Keymap) {
     out.push_str("enum tap_dance_codes {\n");
     for td in &keymap.tap_dances {
@@ -182,6 +202,7 @@ fn render_c_tap_dances(out: &mut String, keymap: &Keymap) {
     out.push_str("};\n\n");
 }
 
+/// Map a ZMK mouse-movement direction to a QMK mouse keycode string.
 fn zmk_mmv_to_qmk(dir: &str) -> String {
     match dir {
         "MOVE_UP" => "KC_MS_U".into(),
@@ -192,6 +213,7 @@ fn zmk_mmv_to_qmk(dir: &str) -> String {
     }
 }
 
+/// Map a ZMK mouse-button name to a QMK mouse button keycode string.
 fn zmk_mkp_to_qmk(btn: &str) -> String {
     match btn {
         "LCLK" => "KC_BTN1".into(),
@@ -203,6 +225,7 @@ fn zmk_mkp_to_qmk(btn: &str) -> String {
     }
 }
 
+/// Map a ZMK mouse-scroll direction to a QMK wheel keycode string.
 fn zmk_msc_to_qmk(dir: &str) -> String {
     match dir {
         "SCRL_UP" => "KC_WH_U".into(),
@@ -213,6 +236,10 @@ fn zmk_msc_to_qmk(dir: &str) -> String {
     }
 }
 
+/// Convert a ZMK layer node name into a conventional QMK layer enum variant.
+///
+/// ZMK commonly uses names like `base_layer`; QMK examples commonly use
+/// `_BASE`. Empty names fall back to `_BASE`.
 fn layer_enum_name(zmk_name: &str) -> String {
     let base = zmk_name.trim_end_matches("_layer").trim_start_matches('_');
     if base.is_empty() {
@@ -222,6 +249,7 @@ fn layer_enum_name(zmk_name: &str) -> String {
     }
 }
 
+/// Pick a readable default column count from the total number of keys.
 fn infer_cols(key_count: usize) -> usize {
     for &cols in &[12usize, 10, 6] {
         if key_count.is_multiple_of(cols) {

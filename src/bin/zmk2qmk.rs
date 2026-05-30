@@ -1,3 +1,9 @@
+//! Command-line entry point for converting ZMK overlays to QMK output.
+//!
+//! This binary selects QMK JSON or C rendering, supplies layout metadata that
+//! ZMK overlays normally do not contain, and delegates parsing/rendering to the
+//! library modules.
+
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
@@ -6,7 +12,9 @@ use qmk2zmk::{codes, io, qmk, zmk};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum OutputFormat {
+    /// QMK Configurator-compatible JSON.
     Json,
+    /// QMK `keymap.c` source.
     C,
 }
 
@@ -46,12 +54,17 @@ struct Cli {
     no_warn: bool,
 }
 
+/// Process exit boundary for the binary.
+///
+/// All fallible work happens in [`run`] so errors can be returned and printed by
+/// the shared reporting function.
 fn main() {
     if let Err(ref e) = run() {
         qmk2zmk::report_and_exit(e);
     }
 }
 
+/// Parse CLI arguments, perform the conversion, and write output.
 fn run() -> Result<(), Error> {
     let cli = Cli::parse();
 
@@ -64,7 +77,7 @@ fn run() -> Result<(), Error> {
 
     let source = io::read_input(&input)?;
 
-    let mut keymap = zmk::parse::parse(&source).map_err(Error::ParseZmk)?;
+    let mut keymap = zmk::parse::parse(&source)?;
     if keymap.layout.is_none() {
         keymap.layout = Some(cli.layout);
     }
@@ -84,6 +97,7 @@ fn run() -> Result<(), Error> {
     io::write_output(&output, cli.output.as_deref())
 }
 
+/// Print the built-in keyboard column heuristics used by `--keyboard`.
 fn print_keyboard_list() {
     println!("{:<14} Columns", "Keyboard");
     for (name, cols) in codes::KNOWN_KEYBOARDS {

@@ -1,11 +1,24 @@
+//! Parser for QMK `keymap.c` source files.
+//!
+//! This is a targeted parser for the QMK patterns the converter understands,
+//! not a full C parser. It strips comments, extracts layer metadata and simple
+//! aliases, then parses the expressions inside the `keymaps` array into the
+//! shared IR. Unsupported QMK constructs become [`Key::Unknown`] so renderers can
+//! leave an explicit TODO in generated output.
+
 use std::collections::{HashMap, HashSet};
 
 use crate::codes;
 use crate::error::ParseCError;
 use crate::ir::{Key, Keymap, Layer, TapDanceDef, TriLayer};
 
-// ── Public entry point ────────────────────────────────────────────────────────
-
+/// Parse a QMK C `keymap.c` source file into the shared IR.
+///
+/// The parser recognizes common QMK layer enums, `#define` key aliases, custom
+/// keycode enums used as macro placeholders, tap-dance declarations, and
+/// `update_tri_layer_state(...)`. It does not compile or preprocess C; inputs
+/// that rely on complex macros may produce [`Key::Unknown`] bindings.
+///
 /// # Errors
 /// Returns [`ParseCError`] if the keymaps array is missing, has unmatched
 /// delimiters, or a layer entry is structurally malformed.
@@ -64,8 +77,12 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
     })
 }
 
-/// Parse a single raw key expression string into a [`Key`].  Public so the
-/// JSON parser can reuse the same logic.
+/// Parse a single raw QMK key expression string into a [`Key`].
+///
+/// This is public so the JSON parser can reuse the same QMK expression support
+/// as the C parser. The lookup maps provide context that raw expressions may
+/// need: symbolic layer names, `#define` aliases, custom keycodes, and known tap
+/// dances.
 #[must_use]
 #[allow(clippy::implicit_hasher)]
 pub fn parse_key_expr_str(
@@ -112,6 +129,11 @@ fn strip_comments(s: &str) -> String {
 
 // ── Layer name extraction ─────────────────────────────────────────────────────
 
+/// Extract layer enum entries from the first enum that looks layer-shaped.
+///
+/// QMK keymaps commonly use `enum planck_layers { _BASE, ... }`, but the enum
+/// name is not standardized. The heuristic accepts enums whose name contains
+/// `layer` or whose first entry looks like a conventional layer symbol.
 fn extract_layer_names(s: &str) -> Vec<String> {
     // Look for an enum whose name or contents suggest it's a layers enum.
     let mut search = s;
@@ -147,6 +169,11 @@ fn extract_layer_names(s: &str) -> Vec<String> {
 
 // ── #define extraction ────────────────────────────────────────────────────────
 
+/// Extract simple one-line `#define NAME value` aliases.
+///
+/// The converter uses these primarily for key aliases such as `LOWER
+/// MO(_LOWER)`. Function-like macros and empty defines are intentionally left
+/// alone because expanding them without a preprocessor would be misleading.
 fn extract_defines(s: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for line in s.lines() {
@@ -167,6 +194,11 @@ fn extract_defines(s: &str) -> HashMap<String, String> {
 
 // ── Custom keycode extraction ─────────────────────────────────────────────────
 
+/// Extract names from `enum custom_keycodes`.
+///
+/// Custom keycodes are treated as macro references in the IR. Their runtime QMK
+/// behavior lives in user code outside the keymap matrix, so the converter emits
+/// ZMK macro stubs rather than trying to infer the implementation.
 fn extract_custom_keycodes(s: &str) -> HashSet<String> {
     let mut codes = HashSet::new();
     if let Some(pos) = s.find("enum custom_keycodes") {
@@ -190,6 +222,10 @@ fn extract_custom_keycodes(s: &str) -> HashSet<String> {
 
 // ── Tri-layer detection ───────────────────────────────────────────────────────
 
+/// Detect a QMK `update_tri_layer_state(state, lower, upper, tri)` relationship.
+///
+/// Only the first occurrence is currently preserved. Layer arguments may be
+/// symbolic names from the layer enum or numeric indices.
 fn extract_tri_layer(s: &str, layer_map: &HashMap<String, usize>) -> Option<TriLayer> {
     // Look for update_tri_layer_state(state, LOWER_LAYER, UPPER_LAYER, TRI_LAYER)
     let pos = s.find("update_tri_layer_state")?;
@@ -214,6 +250,11 @@ fn resolve_layer(name: &str, layer_map: &HashMap<String, usize>) -> Option<usize
 
 // ── Keymaps array extraction ──────────────────────────────────────────────────
 
+/// Extract raw layer names and raw key argument strings from the `keymaps` array.
+///
+/// This function validates only the delimiter structure needed to find layer
+/// initializers and split layout arguments. It returns raw key strings so later
+/// stages can interpret QMK key expressions with the metadata collected above.
 fn extract_raw_layers(s: &str) -> Result<Vec<(String, Vec<String>)>, ParseCError> {
     let keymaps_pos = s.find("keymaps").ok_or(ParseCError::NoKeymapsArray)?;
     let after = &s[keymaps_pos..];
@@ -270,7 +311,10 @@ fn extract_raw_layers(s: &str) -> Result<Vec<(String, Vec<String>)>, ParseCError
 
 #[derive(Debug, Clone)]
 enum Expr {
+    /// A bare token such as `KC_A`, `_LOWER`, or `MY_MACRO`.
     Atom(String),
+    /// A simple function-style expression such as `MO(_LOWER)` or
+    /// `LGUI(LSFT(KC_C))`.
     Call { name: String, args: Vec<Expr> },
 }
 
@@ -306,6 +350,7 @@ fn parse_expr(s: &str) -> Expr {
     Expr::Atom(s.to_string())
 }
 
+/// Split a comma-separated argument list while respecting nested parentheses.
 fn split_args(s: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut depth = 0usize;
@@ -350,6 +395,10 @@ fn expr_to_key(
     }
 }
 
+/// Convert a bare QMK token into an IR key.
+///
+/// Alias expansion happens first, then exact QMK sentinels and special
+/// behaviors are handled before falling through to mapping tables.
 fn atom_to_key(
     name: &str,
     layer_map: &HashMap<String, usize>,
@@ -393,6 +442,10 @@ fn atom_to_key(
     Key::Unknown(name.to_string())
 }
 
+/// Convert a QMK function-style expression into an IR key.
+///
+/// Layer behaviors resolve symbolic layer names against `layer_map`; modifier
+/// wrappers are folded into ZMK-style key expressions such as `LG(C)`.
 fn func_to_key(
     name: &str,
     args: &[Expr],
@@ -592,6 +645,11 @@ fn extract_tap_dances(
     tap_dances
 }
 
+/// Parse a QMK `ACTION_TAP_DANCE_*` initializer into tap-dance bindings.
+///
+/// Simple double-tap actions are represented directly. Function-backed tap
+/// dances require user code, so they become empty definitions that render as
+/// stubs in the target format.
 fn parse_tap_dance_action(
     s: &str,
     layer_map: &HashMap<String, usize>,

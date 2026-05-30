@@ -1,3 +1,11 @@
+//! Parser for ZMK `.keymap` DTS overlays.
+//!
+//! Like the QMK C parser, this is a targeted structural parser rather than a
+//! complete DTS implementation. It understands the blocks this converter emits
+//! and the common ZMK keymap shape: `keymap`, `behaviors` tap dances, `macros`,
+//! and `conditional_layers`. Unknown or unsupported behaviors are preserved as
+//! [`Key::Unknown`].
+
 use std::collections::{HashMap, HashSet};
 
 use crate::error::ParseZmkError;
@@ -62,6 +70,10 @@ fn strip_comments(s: &str) -> String {
 }
 
 /// Return the content between braces for the first `name { ... }` block found.
+///
+/// Matching is identifier-aware, so looking for `keymap` will not accidentally
+/// match part of a longer node name. The returned slice excludes the surrounding
+/// braces.
 fn block_content<'a>(s: &'a str, name: &str) -> Option<&'a str> {
     let nlen = name.len();
     let mut pos = 0;
@@ -113,6 +125,10 @@ fn find_matching(s: &str, open: char, close: char) -> Option<usize> {
     None
 }
 
+/// Extract the first ZMK conditional-layer relationship, if present.
+///
+/// The IR currently models the common tri-layer form: two `if-layers` and one
+/// `then-layer`.
 fn extract_tri_layer(s: &str) -> Option<TriLayer> {
     let content = block_content(s, "conditional_layers")?;
 
@@ -167,6 +183,11 @@ fn extract_macros(s: &str) -> Vec<MacroDef> {
     macros
 }
 
+/// Parse the supported subset of ZMK macro binding steps.
+///
+/// `&kp KEY` becomes [`MacroStep::Tap`], and `&macro_wait_time N` becomes
+/// [`MacroStep::Wait`]. Other macro commands are skipped because the IR cannot
+/// represent them yet.
 fn parse_macro_steps(s: &str) -> Vec<MacroStep> {
     let mut steps = Vec::new();
     for chunk in s.split('&').skip(1) {
@@ -231,6 +252,10 @@ fn extract_layers(
     Ok(layers)
 }
 
+/// Return the first DTS `bindings = <...>` list inside a block.
+///
+/// This helper is intentionally shallow. Tap-dance parsing has a separate path
+/// because tap dances commonly use multiple `<...>` groups separated by commas.
 fn bindings_str(block: &str) -> Option<&str> {
     let start = block.find("bindings")?;
     let after = &block[start + "bindings".len()..];
@@ -258,6 +283,11 @@ fn parse_binding_list(
         .collect()
 }
 
+/// Convert one tokenized ZMK binding into an IR key.
+///
+/// The first token is the behavior name without `&`; subsequent tokens are
+/// behavior parameters. Unsupported behaviors retain their source text in
+/// [`Key::Unknown`].
 fn binding_to_key(
     tokens: &[&str],
     macro_names: &HashSet<&str>,
@@ -329,6 +359,10 @@ fn binding_to_key(
 
 // ── Behaviors block (tap dance) ───────────────────────────────────────────────
 
+/// Extract ZMK tap-dance behaviors from the top-level `behaviors` block.
+///
+/// Labels are recorded so layer bindings such as `&td0` can become
+/// [`Key::TapDance`] references into the returned definition list.
 fn extract_behaviors_tap_dances(s: &str, macro_names: &HashSet<&str>) -> Vec<TapDanceDef> {
     let Some(content) = block_content(s, "behaviors") else {
         return vec![];

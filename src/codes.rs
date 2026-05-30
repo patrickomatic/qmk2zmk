@@ -428,6 +428,9 @@ pub fn zmk_key_to_qmk(zmk: &str) -> Option<&'static str> {
 }
 
 /// Map a ZMK modifier name to a QMK `MOD_*` constant.
+///
+/// Unknown modifiers fall back to `MOD_LCTL`, matching the converter's current
+/// best-effort behavior for QMK constructs that require a valid modifier token.
 #[must_use]
 pub fn zmk_mod_to_qmk(zmk_mod: &str) -> &'static str {
     match zmk_mod.trim() {
@@ -475,6 +478,10 @@ fn zmk_mod_prefix_to_qmk_fn(prefix: &str) -> Option<&'static str> {
     })
 }
 
+/// Return the text inside the outer parenthesized expression starting at `open`.
+///
+/// Used for nested modifier expressions such as `LG(LS(LBKT))`, where a simple
+/// search for the next `)` would stop too early.
 fn extract_paren_inner(s: &str, open: usize) -> Option<&str> {
     let mut depth = 0usize;
     for (i, c) in s[open..].char_indices() {
@@ -512,6 +519,10 @@ pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
 }
 
 /// Known keyboards and their default output column counts.
+///
+/// These are formatting hints for generated keymap source, not semantic layout
+/// definitions. The CLI exposes them through `--list-keyboards` and accepts
+/// substring matches through [`keyboard_cols`].
 pub const KNOWN_KEYBOARDS: &[(&str, usize)] = &[
     ("planck", 12),
     ("preonic", 12),
@@ -525,6 +536,9 @@ pub const KNOWN_KEYBOARDS: &[(&str, usize)] = &[
 ];
 
 /// Return the column count for a keyboard matched by substring, case-insensitive.
+///
+/// This accepts values such as `planck/ez/glow` or `LAYOUT_crkbd_base` because
+/// both contain one of the names in [`KNOWN_KEYBOARDS`].
 #[must_use]
 pub fn keyboard_cols(name: &str) -> Option<usize> {
     let lower = name.to_lowercase();
