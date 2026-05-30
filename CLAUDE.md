@@ -22,7 +22,7 @@ src/
   lib.rs          — public module exports; report_and_exit shared by both binaries
   io.rs           — shared read_input / write_output helpers
   error.rs        — Error, ParseCError, ParseZmkError types
-  ir.rs           — Internal representation (Keymap, Layer, Key, …)
+  ir.rs           — Neutral semantic model (Keyboard, Layer, Key, …)
   codes.rs        — QMK ↔ ZMK key/modifier/RGB mapping tables (both directions)
   qmk/
     mod.rs        — Render QMK JSON and C output

@@ -12,7 +12,7 @@
 
 /// A complete keyboard keymap in the converter's neutral format.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Keymap {
+pub struct Keyboard {
     /// Optional QMK keyboard identifier, such as `planck/ez/glow`.
     ///
     /// ZMK overlays generally do not carry this value, so ZMK parsing leaves it
@@ -139,9 +139,9 @@ pub enum Key {
     /// QMK `RGB_MODE_FORWARD` and ZMK `&rgb_ug RGB_EFF` become
     /// `RgbUg("RGB_EFF")`.
     RgbUg(String),
-    /// Reference to a named macro in [`Keymap::macros`].
+    /// Reference to a named macro in [`Keyboard::macros`].
     Macro(String),
-    /// Reference to a tap-dance definition by index in [`Keymap::tap_dances`].
+    /// Reference to a tap-dance definition by index in [`Keyboard::tap_dances`].
     TapDance(usize),
     /// Source binding that the converter could not model precisely.
     ///

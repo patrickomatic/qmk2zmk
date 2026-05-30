@@ -77,21 +77,21 @@ fn run() -> Result<(), Error> {
 
     let source = io::read_input(&input)?;
 
-    let mut keymap = zmk::parse::parse(&source)?;
-    if keymap.layout.is_none() {
-        keymap.layout = Some(cli.layout);
+    let mut keyboard = zmk::parse::parse(&source)?;
+    if keyboard.layout.is_none() {
+        keyboard.layout = Some(cli.layout);
     }
 
     if !cli.no_warn {
-        qmk2zmk::warn_unknowns(&keymap);
+        qmk2zmk::warn_unknowns(&keyboard);
     }
 
     let cols = cli
         .cols
         .or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
     let output = match cli.format {
-        OutputFormat::Json => qmk::render_json(&keymap),
-        OutputFormat::C => qmk::render_c(&keymap, cols),
+        OutputFormat::Json => qmk::render_json(&keyboard),
+        OutputFormat::C => qmk::render_c(&keyboard, cols),
     };
 
     io::write_output(&output, cli.output.as_deref())

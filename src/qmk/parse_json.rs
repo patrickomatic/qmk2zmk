@@ -8,7 +8,7 @@
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
-use crate::ir::{Keymap, Layer};
+use crate::ir::{Keyboard, Layer};
 
 #[derive(Deserialize)]
 struct QmkJson {
@@ -28,12 +28,12 @@ struct QmkJson {
 /// # Errors
 /// Returns a [`serde_json::Error`] if the source is not valid JSON or does
 /// not match the QMK Configurator keymap format.
-pub fn parse(source: &str) -> Result<Keymap, serde_json::Error> {
+pub fn parse(source: &str) -> Result<Keyboard, serde_json::Error> {
     let qmk: QmkJson = serde_json::from_str(source)?;
     Ok(qmk.into())
 }
 
-impl From<QmkJson> for Keymap {
+impl From<QmkJson> for Keyboard {
     fn from(qmk: QmkJson) -> Self {
         let layers = qmk
             .layers
@@ -42,7 +42,7 @@ impl From<QmkJson> for Keymap {
             .map(|(index, keys)| QmkJsonLayer { index, keys }.into())
             .collect();
 
-        Keymap {
+        Keyboard {
             keyboard: qmk.keyboard,
             layout: qmk.layout,
             layers,
@@ -100,15 +100,15 @@ mod tests {
             "layers": [["KC_A", "MO(1)"], ["KC_TRNS", "KC_NO"]]
         }"#;
 
-        let keymap = parse(source).unwrap();
+        let keyboard = parse(source).unwrap();
 
-        assert_eq!(keymap.keyboard.as_deref(), Some("planck/ez"));
-        assert_eq!(keymap.layout.as_deref(), Some("LAYOUT_planck_grid"));
-        assert_eq!(keymap.layers[0].name, "LAYER_0");
-        assert_eq!(keymap.layers[1].index, 1);
-        assert!(matches!(&keymap.layers[0].keys[0], Key::Kp(k) if k == "A"));
-        assert!(matches!(&keymap.layers[0].keys[1], Key::Mo(1)));
-        assert!(matches!(&keymap.layers[1].keys[0], Key::Trans));
-        assert!(matches!(&keymap.layers[1].keys[1], Key::None));
+        assert_eq!(keyboard.keyboard.as_deref(), Some("planck/ez"));
+        assert_eq!(keyboard.layout.as_deref(), Some("LAYOUT_planck_grid"));
+        assert_eq!(keyboard.layers[0].name, "LAYER_0");
+        assert_eq!(keyboard.layers[1].index, 1);
+        assert!(matches!(&keyboard.layers[0].keys[0], Key::Kp(k) if k == "A"));
+        assert!(matches!(&keyboard.layers[0].keys[1], Key::Mo(1)));
+        assert!(matches!(&keyboard.layers[1].keys[0], Key::Trans));
+        assert!(matches!(&keyboard.layers[1].keys[1], Key::None));
     }
 }

@@ -11,9 +11,9 @@ pub mod ir;
 pub mod qmk;
 pub mod zmk;
 
-/// Print a stderr warning for every `Key::Unknown` in the parsed keymap.
-pub fn warn_unknowns(keymap: &ir::Keymap) {
-    for layer in &keymap.layers {
+/// Print a stderr warning for every `Key::Unknown` in the parsed keyboard.
+pub fn warn_unknowns(keyboard: &ir::Keyboard) {
+    for layer in &keyboard.layers {
         for key in &layer.keys {
             if let ir::Key::Unknown(s) = key {
                 eprintln!("warning: unmapped key in layer '{}': {s}", layer.name);

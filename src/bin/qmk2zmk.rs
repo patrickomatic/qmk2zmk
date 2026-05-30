@@ -92,19 +92,19 @@ fn run() -> Result<(), Error> {
 
     let source = io::read_input(&input)?;
 
-    let keymap = match format {
+    let keyboard = match format {
         InputFormat::C => qmk::parse_c::parse(&source)?,
         InputFormat::Json => qmk::parse_json::parse(&source)?,
     };
 
     if !cli.no_warn {
-        qmk2zmk::warn_unknowns(&keymap);
+        qmk2zmk::warn_unknowns(&keyboard);
     }
 
     let cols = cli
         .cols
         .or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
-    let output = zmk::render(&keymap, cols);
+    let output = zmk::render(&keyboard, cols);
     io::write_output(&output, cli.output.as_deref())
 }
 

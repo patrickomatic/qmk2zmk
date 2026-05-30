@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::codes;
 use crate::error::ParseCError;
-use crate::ir::{Key, Keymap, Layer, TapDanceDef, TriLayer};
+use crate::ir::{Key, Keyboard, Layer, TapDanceDef, TriLayer};
 
 /// Parse a QMK C `keymap.c` source file into the shared IR.
 ///
@@ -22,7 +22,7 @@ use crate::ir::{Key, Keymap, Layer, TapDanceDef, TriLayer};
 /// # Errors
 /// Returns [`ParseCError`] if the keymaps array is missing, has unmatched
 /// delimiters, or a layer entry is structurally malformed.
-pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
+pub fn parse(source: &str) -> Result<Keyboard, ParseCError> {
     let cleaned = strip_comments(source);
 
     let layer_names = extract_layer_names(&cleaned);
@@ -67,7 +67,7 @@ pub fn parse(source: &str) -> Result<Keymap, ParseCError> {
 
     layers.sort_by_key(|l| l.index);
 
-    Ok(Keymap {
+    Ok(Keyboard {
         keyboard: None,
         layout: None,
         layers,
@@ -1039,7 +1039,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         assert!(matches!(&km.tap_dances[0].bindings[0], Key::Kp(k) if k == "LSHFT"));
         assert!(matches!(&km.tap_dances[0].bindings[1], Key::Kp(k) if k == "CAPS"));
         assert_eq!(km.tap_dances[1].name, "DANCE_1");
-        // Keymap cells resolved to TapDance keys
+        // Matrix cells resolved to TapDance keys
         assert!(matches!(&km.layers[0].keys[0], Key::TapDance(0)));
         assert!(matches!(&km.layers[0].keys[1], Key::TapDance(1)));
         assert!(matches!(&km.layers[0].keys[2], Key::Kp(k) if k == "C"));

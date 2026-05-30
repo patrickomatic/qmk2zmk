@@ -9,14 +9,14 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::ParseZmkError;
-use crate::ir::{Key, Keymap, Layer, MacroDef, MacroStep, TapDanceDef, TriLayer};
+use crate::ir::{Key, Keyboard, Layer, MacroDef, MacroStep, TapDanceDef, TriLayer};
 
-/// Parse a ZMK `.keymap` DTS overlay into the internal `Keymap` IR.
+/// Parse a ZMK `.keymap` DTS overlay into the internal `Keyboard` IR.
 ///
 /// # Errors
 /// Returns [`ParseZmkError::NoKeymapBlock`] if no `keymap {}` block is found.
 /// Returns [`ParseZmkError::UnclosedBlock`] if a block brace is never closed.
-pub fn parse(source: &str) -> Result<Keymap, ParseZmkError> {
+pub fn parse(source: &str) -> Result<Keyboard, ParseZmkError> {
     let s = strip_comments(source);
     let tri_layer = extract_tri_layer(&s);
     let macros = extract_macros(&s);
@@ -29,7 +29,7 @@ pub fn parse(source: &str) -> Result<Keymap, ParseZmkError> {
         .collect();
     let keymap_body = block_content(&s, "keymap").ok_or(ParseZmkError::NoKeymapBlock)?;
     let layers = extract_layers(keymap_body, &macro_names, &tap_dance_labels)?;
-    Ok(Keymap {
+    Ok(Keyboard {
         keyboard: None,
         layout: None,
         layers,
