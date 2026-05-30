@@ -57,12 +57,25 @@ Add a test for every new parser feature or key mapping. Integration tests should
 
 ## Releasing
 
-1. Bump `version` in `Cargo.toml`.
-2. Run `make release` — this runs tests and clippy, commits and pushes the version bump, creates and pushes a `vX.Y.Z` git tag (triggering the CI release workflow to build platform binaries and create a GitHub Release), then publishes the crate to crates.io.
+The preferred release path is `make release`. It runs tests and clippy, commits
+and pushes the version bump, creates and pushes a `vX.Y.Z` git tag, triggers the
+GitHub Release workflow, and publishes the crate to crates.io.
 
-When asked to bump a version and push a release manually, do not stop after
-committing and pushing `main`. Create and push the matching `vX.Y.Z` tag, then
-check the GitHub Actions release workflow and report whether it completed.
+When asked to bump and release manually, treat the release as incomplete until
+all of these are done and verified:
+
+1. Bump `version` in `Cargo.toml` and update `Cargo.lock`.
+2. Run `cargo test`.
+3. Run `cargo clippy --all-targets -- -W clippy::pedantic -D warnings`.
+4. Commit the version bump and push `main`.
+5. Create and push the matching `vX.Y.Z` git tag.
+6. Watch the GitHub Actions `Release` workflow for that tag and confirm it
+   completes successfully.
+7. Run `cargo publish` for the same version.
+8. Verify crates.io reports the new version, for example with
+   `cargo search qmk2zmk --limit 5` or `cargo info qmk2zmk`.
+9. Report the pushed commit, pushed tag, GitHub Release workflow status, and
+   crates.io version.
 
 ## Key mapping conventions
 
