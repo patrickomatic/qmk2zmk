@@ -203,7 +203,10 @@ fn parse_macro_steps(s: &str) -> Vec<MacroStep> {
                     steps.push(MacroStep::Wait(ms));
                 }
             }
-            _ => {}
+            Some(other) => {
+                let _ = other.len();
+            }
+            None => {}
         }
     }
     steps
@@ -353,7 +356,10 @@ fn binding_to_key(
         }),
         name if tap_dance_labels.contains_key(name) => Key::TapDance(tap_dance_labels[name]),
         name if macro_names.contains(name) => Key::Macro(name.to_string()),
-        _ => Key::Unknown(format!("&{}", tokens.join(" "))),
+        unsupported => {
+            let _ = unsupported.len();
+            Key::Unknown(format!("&{}", tokens.join(" ")))
+        }
     }
 }
 

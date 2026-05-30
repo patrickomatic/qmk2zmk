@@ -209,7 +209,7 @@ fn zmk_mmv_to_qmk(dir: &str) -> String {
         "MOVE_DOWN" => "KC_MS_D".into(),
         "MOVE_LEFT" => "KC_MS_L".into(),
         "MOVE_RIGHT" => "KC_MS_R".into(),
-        _ => format!("/* mmv {dir} */"),
+        unsupported => format!("/* mmv {unsupported} */"),
     }
 }
 
@@ -221,7 +221,7 @@ fn zmk_mkp_to_qmk(btn: &str) -> String {
         "MCLK" => "KC_BTN3".into(),
         "BTN4" => "KC_BTN4".into(),
         "BTN5" => "KC_BTN5".into(),
-        _ => format!("/* mkp {btn} */"),
+        unsupported => format!("/* mkp {unsupported} */"),
     }
 }
 
@@ -232,7 +232,7 @@ fn zmk_msc_to_qmk(dir: &str) -> String {
         "SCRL_DOWN" => "KC_WH_D".into(),
         "SCRL_LEFT" => "KC_WH_L".into(),
         "SCRL_RIGHT" => "KC_WH_R".into(),
-        _ => format!("/* msc {dir} */"),
+        unsupported => format!("/* msc {unsupported} */"),
     }
 }
 

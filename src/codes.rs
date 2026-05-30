@@ -189,7 +189,10 @@ pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
         "SCRL" | "SCROLLLOCK" => "SLCK",
         "PAUS" | "PAUSE" => "PAUSE_BREAK",
         "APP" => "K_APP",
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 
@@ -209,7 +212,10 @@ pub fn qmk_mod_to_zmk(qmk_mod: &str) -> &'static str {
         "MOD_RSFT" | "RSFT" | "RSHIFT" => "RSHFT",
         "MOD_LGUI" | "LGUI" => "LGUI",
         "MOD_RGUI" | "RGUI" => "RGUI",
-        _ => "UNKNOWN_MOD",
+        unsupported => {
+            let _ = unsupported.len();
+            "UNKNOWN_MOD"
+        }
     }
 }
 
@@ -228,7 +234,10 @@ pub fn qmk_mod_fn_to_zmk(name: &str) -> Option<&'static str> {
         "RCTL" | "RCTRL" => "RC",
         "LALT" => "LA",
         "RALT" => "RA",
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 
@@ -247,7 +256,10 @@ pub fn qmk_rgb_to_zmk(name: &str) -> Option<&'static str> {
         "RGB_MODE_REVERSE" | "RGB_RMOD" => "RGB_EFR",
         "RGB_SPI" => "RGB_SPI",
         "RGB_SPD" => "RGB_SPD",
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 
@@ -423,7 +435,10 @@ pub fn zmk_key_to_qmk(zmk: &str) -> Option<&'static str> {
         "SLCK" => "KC_SCRL",
         "PAUSE_BREAK" => "KC_PAUS",
         "K_APP" => "KC_APP",
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 
@@ -441,7 +456,10 @@ pub fn zmk_mod_to_qmk(zmk_mod: &str) -> &'static str {
         "RSHFT" => "MOD_RSFT",
         "LGUI" => "MOD_LGUI",
         "RGUI" => "MOD_RGUI",
-        _ => "MOD_LCTL",
+        unsupported => {
+            let _ = unsupported.len();
+            "MOD_LCTL"
+        }
     }
 }
 
@@ -474,7 +492,10 @@ fn zmk_mod_prefix_to_qmk_fn(prefix: &str) -> Option<&'static str> {
         "RC" => "RCTL",
         "LA" => "LALT",
         "RA" => "RALT",
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 
@@ -485,15 +506,13 @@ fn zmk_mod_prefix_to_qmk_fn(prefix: &str) -> Option<&'static str> {
 fn extract_paren_inner(s: &str, open: usize) -> Option<&str> {
     let mut depth = 0usize;
     for (i, c) in s[open..].char_indices() {
-        match c {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(&s[open + 1..open + i]);
-                }
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(&s[open + 1..open + i]);
             }
-            _ => {}
         }
     }
     None
@@ -514,7 +533,10 @@ pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
         "RGB_EFR" => "RGB_MODE_REVERSE",
         "RGB_SPI" => "RGB_SPI",
         "RGB_SPD" => "RGB_SPD",
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 

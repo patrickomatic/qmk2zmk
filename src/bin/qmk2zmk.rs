@@ -25,7 +25,11 @@ impl TryFrom<&Path> for InputFormat {
         match path.extension().and_then(|e| e.to_str()) {
             Some("c") => Ok(InputFormat::C),
             Some("json") => Ok(InputFormat::Json),
-            _ => Err(()),
+            Some(other) => {
+                let _ = other.len();
+                Err(())
+            }
+            None => Err(()),
         }
     }
 }

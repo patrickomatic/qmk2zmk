@@ -356,14 +356,13 @@ fn split_args(s: &str) -> Vec<&str> {
     let mut depth = 0usize;
     let mut start = 0;
     for (i, ch) in s.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                parts.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
+        if ch == '(' {
+            depth += 1;
+        } else if ch == ')' {
+            depth = depth.saturating_sub(1);
+        } else if ch == ',' && depth == 0 {
+            parts.push(&s[start..i]);
+            start = i + 1;
         }
     }
     let tail = &s[start..];
@@ -412,15 +411,24 @@ fn atom_to_key(
         return expr_to_key(&expr, layer_map, defines, custom_keycodes, tap_dance_map);
     }
 
-    match name {
-        "KC_TRANSPARENT" | "KC_TRNS" | "_______" => return Key::Trans,
-        "KC_NO" | "XXXXXXX" => return Key::None,
-        "CW_TOGG" => return Key::CapsWord,
-        "QK_BOOT" => return Key::Bootloader,
-        "QK_RBT" | "QK_RESET" => return Key::SysReset,
-        // No ZMK equivalents yet
-        s if s.starts_with("QK_DYNAMIC_TAPPING_TERM") => return Key::Unknown(name.to_string()),
-        _ => {}
+    if matches!(name, "KC_TRANSPARENT" | "KC_TRNS" | "_______") {
+        return Key::Trans;
+    }
+    if matches!(name, "KC_NO" | "XXXXXXX") {
+        return Key::None;
+    }
+    if name == "CW_TOGG" {
+        return Key::CapsWord;
+    }
+    if name == "QK_BOOT" {
+        return Key::Bootloader;
+    }
+    if matches!(name, "QK_RBT" | "QK_RESET") {
+        return Key::SysReset;
+    }
+    // No ZMK equivalents yet
+    if name.starts_with("QK_DYNAMIC_TAPPING_TERM") {
+        return Key::Unknown(name.to_string());
     }
 
     if custom_keycodes.contains(name) {
@@ -537,20 +545,26 @@ fn func_to_key(
             Key::Kp(format!("LA(LS(LC({inner})))"))
         }
         // Modifier-wrapping functions: LGUI(x), LSFT(x), etc.
-        mod_fn if codes::qmk_mod_fn_to_zmk(mod_fn).is_some() && args.len() == 1 => {
-            let prefix = codes::qmk_mod_fn_to_zmk(mod_fn).unwrap();
+        mod_fn if args.len() == 1 => {
+            let Some(prefix) = codes::qmk_mod_fn_to_zmk(mod_fn) else {
+                return unknown_call_key(name, args);
+            };
             let inner = build_zmk_key_expr(&args[0]);
             Key::Kp(format!("{prefix}({inner})"))
         }
-        _ => Key::Unknown(format!(
-            "{}({})",
-            name,
-            args.iter()
-                .map(|a| format!("{a:?}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+        unsupported => unknown_call_key(unsupported, args),
     }
+}
+
+fn unknown_call_key(name: &str, args: &[Expr]) -> Key {
+    Key::Unknown(format!(
+        "{}({})",
+        name,
+        args.iter()
+            .map(|a| format!("{a:?}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 fn qmk_mouse_to_zmk_key(name: &str) -> Option<Key> {
@@ -569,7 +583,10 @@ fn qmk_mouse_to_zmk_key(name: &str) -> Option<Key> {
         "WH_D" | "MS_WH_DOWN" => Key::Msc("SCRL_DOWN".into()),
         "WH_L" | "MS_WH_LEFT" => Key::Msc("SCRL_LEFT".into()),
         "WH_R" | "MS_WH_RIGHT" => Key::Msc("SCRL_RIGHT".into()),
-        _ => return None,
+        unsupported => {
+            let _ = unsupported.len();
+            return None;
+        }
     })
 }
 
