@@ -47,6 +47,7 @@ Options:
       --list-keyboards       List known keyboards and their column counts, then exit
       --no-warn              Suppress warnings for unmapped keycodes
   -p, --print-layout         Parse the keymap and print a layout table, then exit
+      --shield <SHIELD>      Emit a <shield>.conf alongside the keymap with auto-detected CONFIG_* flags
   -h, --help                 Print help
 ```
 
@@ -56,6 +57,9 @@ qmk2zmk keymap.c
 
 # Write to a file
 qmk2zmk keymap.c -o my_keymap.keymap
+
+# Emit a shield.conf with auto-detected CONFIG_* flags (RGB, pointing, encoder)
+qmk2zmk keymap.c --shield my_shield -o my_shield.keymap
 
 # Suppress unmapped key warnings
 qmk2zmk keymap.c --no-warn
@@ -150,6 +154,7 @@ zmk2qmk my_keymap.keymap --print-layout
 | Custom macros (`ST_MACRO_0`, …) | stub with `// TODO` |
 | `TD(DANCE_0)` with `ACTION_TAP_DANCE_DOUBLE` | `zmk,behavior-tap-dance` in `behaviors {}` |
 | `LM(...)` | `/* TODO */` comment |
+| `encoder_update_user` (per-layer or global) | `sensor-bindings = <&inc_dec_kp CW CCW>` per layer |
 
 ### ZMK → QMK
 
@@ -177,6 +182,7 @@ zmk2qmk my_keymap.keymap --print-layout
 | `zmk,behavior-tap-dance` | `TD(DANCE_N)` with `tap_dance_actions[]` |
 | `&bt BT_SEL …`, `&out OUT_USB` | `/* TODO */` comment |
 | `conditional_layers` block | `update_tri_layer_state` (C only) |
+| `sensor-bindings = <&inc_dec_kp CW CCW>` | `encoder_update_user` |
 
 Punctuation and special keys are remapped where the names differ between firmwares (e.g. `SEMI` ↔ `KC_SCLN`, `LBKT` ↔ `KC_LBRC`, `BSLH` ↔ `KC_BSLS`).
 
@@ -188,7 +194,7 @@ Punctuation and special keys are remapped where the names differ between firmwar
 - **Bluetooth / output keys** (`&bt`, `&out`) — no QMK equivalent; preserved as `/* TODO */` in QMK output.
 - **Dynamic tapping term keys** (`QK_DYNAMIC_TAPPING_TERM_*`) — no ZMK equivalent; emitted as `/* TODO */` comments.
 - **ZSA-specific features** — RGB lighting config, `rawhid_state`, and LED maps are not translated.
-- **Target board/shield** — output is board-agnostic. You still need to wire it into your ZMK or QMK config with the correct board files.
+- **Target board/shield** — `--shield <name>` emits a `<shield>.conf` with auto-detected `CONFIG_*` flags (RGB, pointing device, encoder). You still need to supply the correct board files and integrate the output into your ZMK build.
 
 ## Example
 
