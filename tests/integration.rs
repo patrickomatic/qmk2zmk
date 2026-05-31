@@ -306,6 +306,45 @@ fn zmk_rgb_survives_to_qmk() {
     assert!(out.contains("RGB_TOG"));
 }
 
+// ── print_layout ─────────────────────────────────────────────────────────────
+
+#[test]
+fn print_layout_contains_layer_headers_and_keys() {
+    let km = qmk_c::parse(KEYMAP_C).unwrap();
+    let mut buf = Vec::new();
+    qmk2zmk::print_layout_to(&km, Some(12), &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+
+    assert!(out.contains("Layer 0: _BASE"));
+    assert!(out.contains("Layer 1: _LOWER"));
+    assert!(out.contains("Layer 2: _RAISE"));
+    assert!(out.contains("Layer 3: _ADJUST"));
+
+    assert!(out.contains("TAB"));
+    assert!(out.contains("MO(1)"));
+    assert!(out.contains("MO(2)"));
+    assert!(out.contains("_____"));
+    assert!(out.contains("XXXXX"));
+}
+
+#[test]
+fn print_layout_respects_col_count() {
+    let km = qmk_c::parse(KEYMAP_C).unwrap();
+    let mut buf = Vec::new();
+    qmk2zmk::print_layout_to(&km, Some(6), &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+
+    // 48 keys at 6 cols = 8 rows per layer; each row ends with a newline before
+    // the next row starts, so we can verify there are more rows than at 12-wide.
+    let mut buf12 = Vec::new();
+    qmk2zmk::print_layout_to(&km, Some(12), &mut buf12);
+    let out12 = String::from_utf8(buf12).unwrap();
+    assert!(
+        out.lines().count() > out12.lines().count(),
+        "6-col layout should have more lines than 12-col"
+    );
+}
+
 // ── Round-trip tests ──────────────────────────────────────────────────────────
 
 /// ZMK → render ZMK → parse → render ZMK again: the two renders must be equal.

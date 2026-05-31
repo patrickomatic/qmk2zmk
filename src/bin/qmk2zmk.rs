@@ -64,6 +64,10 @@ struct Cli {
     /// Suppress warnings for unmapped keycodes
     #[arg(long)]
     no_warn: bool,
+
+    /// Parse the keymap and print a layout table, then exit without converting
+    #[arg(short = 'p', long)]
+    print_layout: bool,
 }
 
 /// Process exit boundary for the binary.
@@ -108,6 +112,12 @@ fn run() -> Result<(), Error> {
     let cols = cli
         .cols
         .or_else(|| cli.keyboard.as_deref().and_then(codes::keyboard_cols));
+
+    if cli.print_layout {
+        qmk2zmk::print_layout(&keyboard, cols);
+        return Ok(());
+    }
+
     let output = zmk::render(&keyboard, cols);
     io::write_output(&output, cli.output.as_deref())
 }
