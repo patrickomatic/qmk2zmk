@@ -1,9 +1,9 @@
-//! Keycode naming tables used by both conversion directions.
+//! Typed keycode domain used by both conversion directions.
 //!
 //! QMK and ZMK generally describe the same HID usages, but they often use
-//! different symbolic names. The IR stores key names in ZMK spelling, so QMK
-//! parsers call the `qmk_*_to_zmk` functions before constructing [`crate::ir::Key`]
-//! values. QMK renderers call the reverse functions when writing QMK JSON or C.
+//! different symbolic names. Parsers normalize source spellings into the enums
+//! in this module, and renderers use [`ToQmk`] or [`ToZmk`] to write the target
+//! source format.
 //!
 //! Examples of the most common spelling differences:
 //!
@@ -15,180 +15,287 @@
 //! - QMK modifier wrappers like `LGUI(KC_C)` become ZMK modifier expressions
 //!   like `LG(C)`.
 
-/// Map a QMK keycode to a ZMK key name.
-///
-/// The input may include the `KC_` prefix or omit it. The output is a plain ZMK
-/// key name suitable for [`crate::ir::Key::Kp`] and ZMK `&kp`, not a complete ZMK
-/// binding.
-#[must_use]
+use std::fmt;
+
+/// Convert a typed domain value to ZMK source spelling.
+pub trait ToZmk {
+    /// Return this value in ZMK syntax.
+    fn to_zmk(&self) -> String;
+}
+
+/// Convert a typed domain value to QMK source spelling.
+pub trait ToQmk {
+    /// Return this value in QMK syntax.
+    fn to_qmk(&self) -> String;
+}
+
+macro_rules! keycodes {
+    ($(($variant:ident, $zmk:literal, $qmk:literal)),+ $(,)?) => {
+        /// A modeled HID keycode in the converter's canonical domain.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum KeyCode {
+            $($variant),+
+        }
+
+        impl KeyCode {
+            /// Parse a QMK keycode token into a modeled keycode.
+            #[must_use]
+            pub fn from_qmk(qmk: &str) -> Option<Self> {
+                keycode_from_qmk(qmk)
+            }
+
+            /// Parse a ZMK key name into a modeled keycode.
+            #[must_use]
+            pub fn from_zmk(zmk: &str) -> Option<Self> {
+                Some(match zmk {
+                    $($zmk => Self::$variant,)+
+                    unsupported => {
+                        let _ = unsupported.len();
+                        return None;
+                    }
+                })
+            }
+
+            /// Return this keycode's canonical ZMK spelling.
+            #[must_use]
+            pub const fn zmk_name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $zmk,)+
+                }
+            }
+
+            /// Return this keycode's canonical QMK spelling.
+            #[must_use]
+            pub const fn qmk_name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $qmk,)+
+                }
+            }
+        }
+    };
+}
+
+keycodes! {
+    (A, "A", "KC_A"), (B, "B", "KC_B"), (C, "C", "KC_C"), (D, "D", "KC_D"),
+    (E, "E", "KC_E"), (F, "F", "KC_F"), (G, "G", "KC_G"), (H, "H", "KC_H"),
+    (I, "I", "KC_I"), (J, "J", "KC_J"), (K, "K", "KC_K"), (L, "L", "KC_L"),
+    (M, "M", "KC_M"), (N, "N", "KC_N"), (O, "O", "KC_O"), (P, "P", "KC_P"),
+    (Q, "Q", "KC_Q"), (R, "R", "KC_R"), (S, "S", "KC_S"), (T, "T", "KC_T"),
+    (U, "U", "KC_U"), (V, "V", "KC_V"), (W, "W", "KC_W"), (X, "X", "KC_X"),
+    (Y, "Y", "KC_Y"), (Z, "Z", "KC_Z"),
+    (N0, "N0", "KC_0"), (N1, "N1", "KC_1"), (N2, "N2", "KC_2"),
+    (N3, "N3", "KC_3"), (N4, "N4", "KC_4"), (N5, "N5", "KC_5"),
+    (N6, "N6", "KC_6"), (N7, "N7", "KC_7"), (N8, "N8", "KC_8"),
+    (N9, "N9", "KC_9"),
+    (F1, "F1", "KC_F1"), (F2, "F2", "KC_F2"), (F3, "F3", "KC_F3"),
+    (F4, "F4", "KC_F4"), (F5, "F5", "KC_F5"), (F6, "F6", "KC_F6"),
+    (F7, "F7", "KC_F7"), (F8, "F8", "KC_F8"), (F9, "F9", "KC_F9"),
+    (F10, "F10", "KC_F10"), (F11, "F11", "KC_F11"), (F12, "F12", "KC_F12"),
+    (F13, "F13", "KC_F13"), (F14, "F14", "KC_F14"), (F15, "F15", "KC_F15"),
+    (F16, "F16", "KC_F16"), (F17, "F17", "KC_F17"), (F18, "F18", "KC_F18"),
+    (F19, "F19", "KC_F19"), (F20, "F20", "KC_F20"), (F21, "F21", "KC_F21"),
+    (F22, "F22", "KC_F22"), (F23, "F23", "KC_F23"), (F24, "F24", "KC_F24"),
+    (Tab, "TAB", "KC_TAB"), (Ret, "RET", "KC_ENTER"), (Esc, "ESC", "KC_ESCAPE"),
+    (Bspc, "BSPC", "KC_BSPC"), (Del, "DEL", "KC_DEL"), (Ins, "INS", "KC_INS"),
+    (Space, "SPACE", "KC_SPACE"), (Caps, "CAPS", "KC_CAPS"),
+    (Minus, "MINUS", "KC_MINUS"), (Equal, "EQUAL", "KC_EQUAL"),
+    (Lbkt, "LBKT", "KC_LBRC"), (Rbkt, "RBKT", "KC_RBRC"),
+    (Bslh, "BSLH", "KC_BSLS"), (Semi, "SEMI", "KC_SCLN"),
+    (Sqt, "SQT", "KC_QUOTE"), (Grave, "GRAVE", "KC_GRAVE"),
+    (Comma, "COMMA", "KC_COMMA"), (Dot, "DOT", "KC_DOT"), (Fslh, "FSLH", "KC_SLASH"),
+    (Excl, "EXCL", "KC_EXLM"), (At, "AT", "KC_AT"), (Hash, "HASH", "KC_HASH"),
+    (Dllr, "DLLR", "KC_DLR"), (Prcnt, "PRCNT", "KC_PERC"),
+    (Caret, "CARET", "KC_CIRC"), (Amps, "AMPS", "KC_AMPR"),
+    (Star, "STAR", "KC_ASTR"), (Lpar, "LPAR", "KC_LPRN"),
+    (Rpar, "RPAR", "KC_RPRN"), (Under, "UNDER", "KC_UNDS"),
+    (Plus, "PLUS", "KC_PLUS"), (Lbrc, "LBRC", "KC_LCBR"), (Rbrc, "RBRC", "KC_RCBR"),
+    (Pipe, "PIPE", "KC_PIPE"), (Tilde, "TILDE", "KC_TILD"), (Lt, "LT", "KC_LT"),
+    (Gt, "GT", "KC_GT"), (Dqt, "DQT", "KC_DQUO"), (Colon, "COLON", "KC_COLN"),
+    (Qmark, "QMARK", "KC_QUES"),
+    (Left, "LEFT", "KC_LEFT"), (Right, "RIGHT", "KC_RIGHT"),
+    (Up, "UP", "KC_UP"), (Down, "DOWN", "KC_DOWN"),
+    (PgUp, "PG_UP", "KC_PGUP"), (PgDn, "PG_DN", "KC_PGDN"),
+    (Home, "HOME", "KC_HOME"), (End, "END", "KC_END"),
+    (LCtrl, "LCTRL", "KC_LCTL"), (RCtrl, "RCTRL", "KC_RCTL"),
+    (LShft, "LSHFT", "KC_LSFT"), (RShft, "RSHFT", "KC_RSFT"),
+    (LAlt, "LALT", "KC_LALT"), (RAlt, "RALT", "KC_RALT"),
+    (LGui, "LGUI", "KC_LGUI"), (RGui, "RGUI", "KC_RGUI"),
+    (CVolUp, "C_VOL_UP", "KC_VOLU"), (CVolDn, "C_VOL_DN", "KC_VOLD"),
+    (CMute, "C_MUTE", "KC_MUTE"), (CBriUp, "C_BRI_UP", "KC_BRIU"),
+    (CBriDn, "C_BRI_DN", "KC_BRID"), (CPp, "C_PP", "KC_MPLY"),
+    (CNext, "C_NEXT", "KC_MNXT"), (CPrev, "C_PREV", "KC_MPRV"),
+    (KpN0, "KP_N0", "KC_KP_0"), (KpN1, "KP_N1", "KC_KP_1"),
+    (KpN2, "KP_N2", "KC_KP_2"), (KpN3, "KP_N3", "KC_KP_3"),
+    (KpN4, "KP_N4", "KC_KP_4"), (KpN5, "KP_N5", "KC_KP_5"),
+    (KpN6, "KP_N6", "KC_KP_6"), (KpN7, "KP_N7", "KC_KP_7"),
+    (KpN8, "KP_N8", "KC_KP_8"), (KpN9, "KP_N9", "KC_KP_9"),
+    (KpSlash, "KP_SLASH", "KC_KP_SLASH"),
+    (KpMultiply, "KP_MULTIPLY", "KC_KP_ASTERISK"),
+    (KpMinus, "KP_MINUS", "KC_KP_MINUS"), (KpPlus, "KP_PLUS", "KC_KP_PLUS"),
+    (KpEnter, "KP_ENTER", "KC_KP_ENTER"), (KpDot, "KP_DOT", "KC_KP_DOT"),
+    (KRedo, "K_REDO", "KC_AGAIN"), (KUndo, "K_UNDO", "KC_UNDO"),
+    (KCut, "K_CUT", "KC_CUT"), (KCopy, "K_COPY", "KC_COPY"),
+    (KPaste, "K_PASTE", "KC_PASTE"),
+    (NonUsBslh, "NON_US_BSLH", "KC_NUBS"), (NonUsHash, "NON_US_HASH", "KC_NUHS"),
+    (Pscrn, "PSCRN", "KC_PSCR"), (Slck, "SLCK", "KC_SCRL"),
+    (PauseBreak, "PAUSE_BREAK", "KC_PAUS"), (KApp, "K_APP", "KC_APP"),
+}
+
 #[allow(clippy::too_many_lines)]
-pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
+fn keycode_from_qmk(qmk: &str) -> Option<KeyCode> {
     let key = qmk.strip_prefix("KC_").unwrap_or(qmk);
     Some(match key {
-        // Letters
-        "A" => "A",
-        "B" => "B",
-        "C" => "C",
-        "D" => "D",
-        "E" => "E",
-        "F" => "F",
-        "G" => "G",
-        "H" => "H",
-        "I" => "I",
-        "J" => "J",
-        "K" => "K",
-        "L" => "L",
-        "M" => "M",
-        "N" => "N",
-        "O" => "O",
-        "P" => "P",
-        "Q" => "Q",
-        "R" => "R",
-        "S" => "S",
-        "T" => "T",
-        "U" => "U",
-        "V" => "V",
-        "W" => "W",
-        "X" => "X",
-        "Y" => "Y",
-        "Z" => "Z",
-        // Numbers (ZMK uses N prefix)
-        "0" => "N0",
-        "1" => "N1",
-        "2" => "N2",
-        "3" => "N3",
-        "4" => "N4",
-        "5" => "N5",
-        "6" => "N6",
-        "7" => "N7",
-        "8" => "N8",
-        "9" => "N9",
-        // Function keys
-        "F1" => "F1",
-        "F2" => "F2",
-        "F3" => "F3",
-        "F4" => "F4",
-        "F5" => "F5",
-        "F6" => "F6",
-        "F7" => "F7",
-        "F8" => "F8",
-        "F9" => "F9",
-        "F10" => "F10",
-        "F11" => "F11",
-        "F12" => "F12",
-        "F13" => "F13",
-        "F14" => "F14",
-        "F15" => "F15",
-        "F16" => "F16",
-        "F17" => "F17",
-        "F18" => "F18",
-        "F19" => "F19",
-        "F20" => "F20",
-        "F21" => "F21",
-        "F22" => "F22",
-        "F23" => "F23",
-        "F24" => "F24",
-        // Common keys
-        "TAB" => "TAB",
-        "ENTER" | "ENT" => "RET",
-        "ESCAPE" | "ESC" => "ESC",
-        "BSPC" => "BSPC",
-        "DEL" | "DELETE" => "DEL",
-        "INS" | "INSERT" => "INS",
-        "SPACE" | "SPC" => "SPACE",
-        "CAPS" | "CAPS_LOCK" | "CAPSLOCK" => "CAPS",
-        // Punctuation
-        "MINUS" => "MINUS",
-        "EQUAL" => "EQUAL",
-        "LBRC" => "LBKT",
-        "RBRC" => "RBKT",
-        "BSLS" => "BSLH",
-        "SCLN" => "SEMI",
-        "QUOTE" | "QUOT" => "SQT",
-        "GRAVE" | "GRV" => "GRAVE",
-        "COMMA" | "COMM" => "COMMA",
-        "DOT" => "DOT",
-        "SLASH" | "SLSH" => "FSLH",
-        // Shifted symbols
-        "EXLM" => "EXCL",
-        "AT" => "AT",
-        "HASH" => "HASH",
-        "DLR" => "DLLR",
-        "PERC" => "PRCNT",
-        "CIRC" => "CARET",
-        "AMPR" => "AMPS",
-        "ASTR" => "STAR",
-        "LPRN" => "LPAR",
-        "RPRN" => "RPAR",
-        "UNDS" => "UNDER",
-        "PLUS" => "PLUS",
-        "LCBR" => "LBRC",
-        "RCBR" => "RBRC",
-        "PIPE" => "PIPE",
-        "TILD" => "TILDE",
-        "LT" => "LT",
-        "GT" => "GT",
-        "DQUO" => "DQT",
-        "COLN" => "COLON",
-        "QUES" => "QMARK",
-        // Navigation
-        "LEFT" => "LEFT",
-        "RIGHT" => "RIGHT",
-        "UP" => "UP",
-        "DOWN" => "DOWN",
-        "PGUP" | "PAGE_UP" => "PG_UP",
-        "PGDN" | "PAGE_DOWN" => "PG_DN",
-        "HOME" => "HOME",
-        "END" => "END",
-        // Modifiers
-        "LCTL" | "LCTRL" => "LCTRL",
-        "RCTL" | "RCTRL" => "RCTRL",
-        "LSFT" | "LSHIFT" => "LSHFT",
-        "RSFT" | "RSHIFT" => "RSHFT",
-        "LALT" => "LALT",
-        "RALT" => "RALT",
-        "LGUI" => "LGUI",
-        "RGUI" => "RGUI",
-        // Media
-        "AUDIO_VOL_UP" | "VOLU" => "C_VOL_UP",
-        "AUDIO_VOL_DOWN" | "VOLD" => "C_VOL_DN",
-        "AUDIO_MUTE" | "MUTE" => "C_MUTE",
-        "BRIGHTNESS_UP" | "BRIU" => "C_BRI_UP",
-        "BRIGHTNESS_DOWN" | "BRID" => "C_BRI_DN",
-        "MEDIA_PLAY_PAUSE" | "MPLY" => "C_PP",
-        "MEDIA_NEXT_TRACK" | "MNXT" => "C_NEXT",
-        "MEDIA_PREV_TRACK" | "MPRV" => "C_PREV",
-        // Keypad
-        "KP_0" => "KP_N0",
-        "KP_1" => "KP_N1",
-        "KP_2" => "KP_N2",
-        "KP_3" => "KP_N3",
-        "KP_4" => "KP_N4",
-        "KP_5" => "KP_N5",
-        "KP_6" => "KP_N6",
-        "KP_7" => "KP_N7",
-        "KP_8" => "KP_N8",
-        "KP_9" => "KP_N9",
-        "KP_SLASH" => "KP_SLASH",
-        "KP_ASTERISK" => "KP_MULTIPLY",
-        "KP_MINUS" => "KP_MINUS",
-        "KP_PLUS" => "KP_PLUS",
-        "KP_ENTER" => "KP_ENTER",
-        "KP_DOT" => "KP_DOT",
-        // Application control
-        "AGAIN" | "AGIN" => "K_REDO",
-        "UNDO" => "K_UNDO",
-        "CUT" => "K_CUT",
-        "COPY" => "K_COPY",
-        "PASTE" | "PSTE" => "K_PASTE",
-        // Non-US keys
-        "NUBS" | "NONUS_BACKSLASH" => "NON_US_BSLH",
-        "NUHS" | "NONUS_HASH" => "NON_US_HASH",
-        // Misc
-        "PSCR" | "PRINT_SCREEN" => "PSCRN",
-        "SCRL" | "SCROLLLOCK" => "SLCK",
-        "PAUS" | "PAUSE" => "PAUSE_BREAK",
-        "APP" => "K_APP",
+        "A" => KeyCode::A,
+        "B" => KeyCode::B,
+        "C" => KeyCode::C,
+        "D" => KeyCode::D,
+        "E" => KeyCode::E,
+        "F" => KeyCode::F,
+        "G" => KeyCode::G,
+        "H" => KeyCode::H,
+        "I" => KeyCode::I,
+        "J" => KeyCode::J,
+        "K" => KeyCode::K,
+        "L" => KeyCode::L,
+        "M" => KeyCode::M,
+        "N" => KeyCode::N,
+        "O" => KeyCode::O,
+        "P" => KeyCode::P,
+        "Q" => KeyCode::Q,
+        "R" => KeyCode::R,
+        "S" => KeyCode::S,
+        "T" => KeyCode::T,
+        "U" => KeyCode::U,
+        "V" => KeyCode::V,
+        "W" => KeyCode::W,
+        "X" => KeyCode::X,
+        "Y" => KeyCode::Y,
+        "Z" => KeyCode::Z,
+        "0" => KeyCode::N0,
+        "1" => KeyCode::N1,
+        "2" => KeyCode::N2,
+        "3" => KeyCode::N3,
+        "4" => KeyCode::N4,
+        "5" => KeyCode::N5,
+        "6" => KeyCode::N6,
+        "7" => KeyCode::N7,
+        "8" => KeyCode::N8,
+        "9" => KeyCode::N9,
+        "F1" => KeyCode::F1,
+        "F2" => KeyCode::F2,
+        "F3" => KeyCode::F3,
+        "F4" => KeyCode::F4,
+        "F5" => KeyCode::F5,
+        "F6" => KeyCode::F6,
+        "F7" => KeyCode::F7,
+        "F8" => KeyCode::F8,
+        "F9" => KeyCode::F9,
+        "F10" => KeyCode::F10,
+        "F11" => KeyCode::F11,
+        "F12" => KeyCode::F12,
+        "F13" => KeyCode::F13,
+        "F14" => KeyCode::F14,
+        "F15" => KeyCode::F15,
+        "F16" => KeyCode::F16,
+        "F17" => KeyCode::F17,
+        "F18" => KeyCode::F18,
+        "F19" => KeyCode::F19,
+        "F20" => KeyCode::F20,
+        "F21" => KeyCode::F21,
+        "F22" => KeyCode::F22,
+        "F23" => KeyCode::F23,
+        "F24" => KeyCode::F24,
+        "TAB" => KeyCode::Tab,
+        "ENTER" | "ENT" => KeyCode::Ret,
+        "ESCAPE" | "ESC" => KeyCode::Esc,
+        "BSPC" => KeyCode::Bspc,
+        "DEL" | "DELETE" => KeyCode::Del,
+        "INS" | "INSERT" => KeyCode::Ins,
+        "SPACE" | "SPC" => KeyCode::Space,
+        "CAPS" | "CAPS_LOCK" | "CAPSLOCK" => KeyCode::Caps,
+        "MINUS" => KeyCode::Minus,
+        "EQUAL" => KeyCode::Equal,
+        "LBRC" => KeyCode::Lbkt,
+        "RBRC" => KeyCode::Rbkt,
+        "BSLS" => KeyCode::Bslh,
+        "SCLN" => KeyCode::Semi,
+        "QUOTE" | "QUOT" => KeyCode::Sqt,
+        "GRAVE" | "GRV" => KeyCode::Grave,
+        "COMMA" | "COMM" => KeyCode::Comma,
+        "DOT" => KeyCode::Dot,
+        "SLASH" | "SLSH" => KeyCode::Fslh,
+        "EXLM" => KeyCode::Excl,
+        "AT" => KeyCode::At,
+        "HASH" => KeyCode::Hash,
+        "DLR" => KeyCode::Dllr,
+        "PERC" => KeyCode::Prcnt,
+        "CIRC" => KeyCode::Caret,
+        "AMPR" => KeyCode::Amps,
+        "ASTR" => KeyCode::Star,
+        "LPRN" => KeyCode::Lpar,
+        "RPRN" => KeyCode::Rpar,
+        "UNDS" => KeyCode::Under,
+        "PLUS" => KeyCode::Plus,
+        "LCBR" => KeyCode::Lbrc,
+        "RCBR" => KeyCode::Rbrc,
+        "PIPE" => KeyCode::Pipe,
+        "TILD" => KeyCode::Tilde,
+        "LT" => KeyCode::Lt,
+        "GT" => KeyCode::Gt,
+        "DQUO" => KeyCode::Dqt,
+        "COLN" => KeyCode::Colon,
+        "QUES" => KeyCode::Qmark,
+        "LEFT" => KeyCode::Left,
+        "RIGHT" => KeyCode::Right,
+        "UP" => KeyCode::Up,
+        "DOWN" => KeyCode::Down,
+        "PGUP" | "PAGE_UP" => KeyCode::PgUp,
+        "PGDN" | "PAGE_DOWN" => KeyCode::PgDn,
+        "HOME" => KeyCode::Home,
+        "END" => KeyCode::End,
+        "LCTL" | "LCTRL" => KeyCode::LCtrl,
+        "RCTL" | "RCTRL" => KeyCode::RCtrl,
+        "LSFT" | "LSHIFT" => KeyCode::LShft,
+        "RSFT" | "RSHIFT" => KeyCode::RShft,
+        "LALT" => KeyCode::LAlt,
+        "RALT" => KeyCode::RAlt,
+        "LGUI" => KeyCode::LGui,
+        "RGUI" => KeyCode::RGui,
+        "AUDIO_VOL_UP" | "VOLU" => KeyCode::CVolUp,
+        "AUDIO_VOL_DOWN" | "VOLD" => KeyCode::CVolDn,
+        "AUDIO_MUTE" | "MUTE" => KeyCode::CMute,
+        "BRIGHTNESS_UP" | "BRIU" => KeyCode::CBriUp,
+        "BRIGHTNESS_DOWN" | "BRID" => KeyCode::CBriDn,
+        "MEDIA_PLAY_PAUSE" | "MPLY" => KeyCode::CPp,
+        "MEDIA_NEXT_TRACK" | "MNXT" => KeyCode::CNext,
+        "MEDIA_PREV_TRACK" | "MPRV" => KeyCode::CPrev,
+        "KP_0" => KeyCode::KpN0,
+        "KP_1" => KeyCode::KpN1,
+        "KP_2" => KeyCode::KpN2,
+        "KP_3" => KeyCode::KpN3,
+        "KP_4" => KeyCode::KpN4,
+        "KP_5" => KeyCode::KpN5,
+        "KP_6" => KeyCode::KpN6,
+        "KP_7" => KeyCode::KpN7,
+        "KP_8" => KeyCode::KpN8,
+        "KP_9" => KeyCode::KpN9,
+        "KP_SLASH" => KeyCode::KpSlash,
+        "KP_ASTERISK" => KeyCode::KpMultiply,
+        "KP_MINUS" => KeyCode::KpMinus,
+        "KP_PLUS" => KeyCode::KpPlus,
+        "KP_ENTER" => KeyCode::KpEnter,
+        "KP_DOT" => KeyCode::KpDot,
+        "AGAIN" | "AGIN" => KeyCode::KRedo,
+        "UNDO" => KeyCode::KUndo,
+        "CUT" => KeyCode::KCut,
+        "COPY" => KeyCode::KCopy,
+        "PASTE" | "PSTE" => KeyCode::KPaste,
+        "NUBS" | "NONUS_BACKSLASH" => KeyCode::NonUsBslh,
+        "NUHS" | "NONUS_HASH" => KeyCode::NonUsHash,
+        "PSCR" | "PRINT_SCREEN" => KeyCode::Pscrn,
+        "SCRL" | "SCROLLLOCK" => KeyCode::Slck,
+        "PAUS" | "PAUSE" => KeyCode::PauseBreak,
+        "APP" => KeyCode::KApp,
         unsupported => {
             let _ = unsupported.len();
             return None;
@@ -196,307 +303,807 @@ pub fn qmk_key_to_zmk(qmk: &str) -> Option<&'static str> {
     })
 }
 
-/// Map a QMK `MOD_*` constant or bare modifier name to a ZMK modifier name.
-///
-/// Used for hold modifiers in mod-tap and sticky-key bindings. Unknown modifiers
-/// are preserved as `UNKNOWN_MOD` so callers can surface an explicit unsupported
-/// binding instead of silently choosing a modifier.
-#[must_use]
-pub fn qmk_mod_to_zmk(qmk_mod: &str) -> &'static str {
-    match qmk_mod.trim() {
-        "MOD_LALT" | "LALT" => "LALT",
-        "MOD_RALT" | "RALT" => "RALT",
-        "MOD_LCTL" | "LCTL" | "LCTRL" => "LCTRL",
-        "MOD_RCTL" | "RCTL" | "RCTRL" => "RCTRL",
-        "MOD_LSFT" | "LSFT" | "LSHIFT" => "LSHFT",
-        "MOD_RSFT" | "RSFT" | "RSHIFT" => "RSHFT",
-        "MOD_LGUI" | "LGUI" => "LGUI",
-        "MOD_RGUI" | "RGUI" => "RGUI",
-        unsupported => {
-            let _ = unsupported.len();
-            "UNKNOWN_MOD"
+impl ToZmk for KeyCode {
+    fn to_zmk(&self) -> String {
+        self.zmk_name().to_string()
+    }
+}
+
+impl ToQmk for KeyCode {
+    fn to_qmk(&self) -> String {
+        self.qmk_name().to_string()
+    }
+}
+
+impl fmt::Display for KeyCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
+}
+
+impl From<&str> for KeyExpr {
+    fn from(value: &str) -> Self {
+        Self::parse_zmk(value)
+    }
+}
+
+impl From<String> for KeyExpr {
+    fn from(value: String) -> Self {
+        Self::parse_zmk(&value)
+    }
+}
+
+impl PartialEq<&str> for KeyExpr {
+    fn eq(&self, other: &&str) -> bool {
+        self.to_zmk_string() == *other
+    }
+}
+
+impl PartialEq<str> for KeyExpr {
+    fn eq(&self, other: &str) -> bool {
+        self.to_zmk_string() == other
+    }
+}
+
+/// A keyboard modifier in the converter's canonical domain.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Modifier {
+    LAlt,
+    RAlt,
+    LCtrl,
+    RCtrl,
+    LShft,
+    RShft,
+    LGui,
+    RGui,
+    Unknown(String),
+}
+
+impl Modifier {
+    #[must_use]
+    pub fn from_qmk(qmk_mod: &str) -> Option<Self> {
+        Some(match qmk_mod.trim() {
+            "MOD_LALT" | "LALT" => Self::LAlt,
+            "MOD_RALT" | "RALT" => Self::RAlt,
+            "MOD_LCTL" | "LCTL" | "LCTRL" => Self::LCtrl,
+            "MOD_RCTL" | "RCTL" | "RCTRL" => Self::RCtrl,
+            "MOD_LSFT" | "LSFT" | "LSHIFT" => Self::LShft,
+            "MOD_RSFT" | "RSFT" | "RSHIFT" => Self::RShft,
+            "MOD_LGUI" | "LGUI" => Self::LGui,
+            "MOD_RGUI" | "RGUI" => Self::RGui,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn from_zmk(zmk_mod: &str) -> Option<Self> {
+        Some(match zmk_mod.trim() {
+            "LALT" => Self::LAlt,
+            "RALT" => Self::RAlt,
+            "LCTRL" => Self::LCtrl,
+            "RCTRL" => Self::RCtrl,
+            "LSHFT" => Self::LShft,
+            "RSHFT" => Self::RShft,
+            "LGUI" => Self::LGui,
+            "RGUI" => Self::RGui,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn zmk_name(&self) -> &str {
+        match self {
+            Self::LAlt => "LALT",
+            Self::RAlt => "RALT",
+            Self::LCtrl => "LCTRL",
+            Self::RCtrl => "RCTRL",
+            Self::LShft => "LSHFT",
+            Self::RShft => "RSHFT",
+            Self::LGui => "LGUI",
+            Self::RGui => "RGUI",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn qmk_mod_name(&self) -> &str {
+        match self {
+            Self::LAlt => "MOD_LALT",
+            Self::RAlt => "MOD_RALT",
+            Self::LCtrl => "MOD_LCTL",
+            Self::RCtrl => "MOD_RCTL",
+            Self::LShft => "MOD_LSFT",
+            Self::RShft => "MOD_RSFT",
+            Self::LGui => "MOD_LGUI",
+            Self::RGui => "MOD_RGUI",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn qmk_fn_name(&self) -> &str {
+        match self {
+            Self::LAlt => "LALT",
+            Self::RAlt => "RALT",
+            Self::LCtrl => "LCTL",
+            Self::RCtrl => "RCTL",
+            Self::LShft => "LSFT",
+            Self::RShft => "RSFT",
+            Self::LGui => "LGUI",
+            Self::RGui => "RGUI",
+            Self::Unknown(raw) => raw,
         }
     }
 }
 
-/// Map a QMK modifier-wrapping function name to a ZMK key-expression prefix.
-///
-/// For example, QMK `LGUI(KC_C)` is represented in the IR as `Kp("LG(C)")`, so
-/// this maps `LGUI` to `LG`.
-#[must_use]
-pub fn qmk_mod_fn_to_zmk(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "LGUI" => "LG",
-        "RGUI" => "RG",
-        "LSFT" | "LSHIFT" => "LS",
-        "RSFT" | "RSHIFT" => "RS",
-        "LCTL" | "LCTRL" => "LC",
-        "RCTL" | "RCTRL" => "RC",
-        "LALT" => "LA",
-        "RALT" => "RA",
-        unsupported => {
-            let _ = unsupported.len();
-            return None;
-        }
-    })
+impl ToZmk for Modifier {
+    fn to_zmk(&self) -> String {
+        self.zmk_name().to_string()
+    }
 }
 
-/// Map a QMK RGB function name to the corresponding ZMK `rgb_ug` action string.
-#[must_use]
-pub fn qmk_rgb_to_zmk(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "RGB_TOG" => "RGB_TOG",
-        "RGB_HUI" => "RGB_HUI",
-        "RGB_HUD" => "RGB_HUD",
-        "RGB_SAI" => "RGB_SAI",
-        "RGB_SAD" => "RGB_SAD",
-        "RGB_VAI" => "RGB_VAI",
-        "RGB_VAD" => "RGB_VAD",
-        "RGB_MODE_FORWARD" | "RGB_MOD" => "RGB_EFF",
-        "RGB_MODE_REVERSE" | "RGB_RMOD" => "RGB_EFR",
-        "RGB_SPI" => "RGB_SPI",
-        "RGB_SPD" => "RGB_SPD",
-        unsupported => {
-            let _ = unsupported.len();
-            return None;
-        }
-    })
+impl ToQmk for Modifier {
+    fn to_qmk(&self) -> String {
+        self.qmk_mod_name().to_string()
+    }
 }
 
-/// Map a ZMK key name back to a QMK keycode string.
-///
-/// The input is a plain ZMK key name like `N1` or `RET`. The output includes
-/// QMK's `KC_` prefix.
-#[must_use]
-#[allow(clippy::too_many_lines)]
-pub fn zmk_key_to_qmk(zmk: &str) -> Option<&'static str> {
-    Some(match zmk {
-        // Letters
-        "A" => "KC_A",
-        "B" => "KC_B",
-        "C" => "KC_C",
-        "D" => "KC_D",
-        "E" => "KC_E",
-        "F" => "KC_F",
-        "G" => "KC_G",
-        "H" => "KC_H",
-        "I" => "KC_I",
-        "J" => "KC_J",
-        "K" => "KC_K",
-        "L" => "KC_L",
-        "M" => "KC_M",
-        "N" => "KC_N",
-        "O" => "KC_O",
-        "P" => "KC_P",
-        "Q" => "KC_Q",
-        "R" => "KC_R",
-        "S" => "KC_S",
-        "T" => "KC_T",
-        "U" => "KC_U",
-        "V" => "KC_V",
-        "W" => "KC_W",
-        "X" => "KC_X",
-        "Y" => "KC_Y",
-        "Z" => "KC_Z",
-        // Numbers
-        "N0" => "KC_0",
-        "N1" => "KC_1",
-        "N2" => "KC_2",
-        "N3" => "KC_3",
-        "N4" => "KC_4",
-        "N5" => "KC_5",
-        "N6" => "KC_6",
-        "N7" => "KC_7",
-        "N8" => "KC_8",
-        "N9" => "KC_9",
-        // Function keys
-        "F1" => "KC_F1",
-        "F2" => "KC_F2",
-        "F3" => "KC_F3",
-        "F4" => "KC_F4",
-        "F5" => "KC_F5",
-        "F6" => "KC_F6",
-        "F7" => "KC_F7",
-        "F8" => "KC_F8",
-        "F9" => "KC_F9",
-        "F10" => "KC_F10",
-        "F11" => "KC_F11",
-        "F12" => "KC_F12",
-        "F13" => "KC_F13",
-        "F14" => "KC_F14",
-        "F15" => "KC_F15",
-        "F16" => "KC_F16",
-        "F17" => "KC_F17",
-        "F18" => "KC_F18",
-        "F19" => "KC_F19",
-        "F20" => "KC_F20",
-        "F21" => "KC_F21",
-        "F22" => "KC_F22",
-        "F23" => "KC_F23",
-        "F24" => "KC_F24",
-        // Common
-        "TAB" => "KC_TAB",
-        "RET" => "KC_ENTER",
-        "ESC" => "KC_ESCAPE",
-        "BSPC" => "KC_BSPC",
-        "DEL" => "KC_DEL",
-        "INS" => "KC_INS",
-        "SPACE" => "KC_SPACE",
-        "CAPS" => "KC_CAPS",
-        // Punctuation
-        "MINUS" => "KC_MINUS",
-        "EQUAL" => "KC_EQUAL",
-        "LBKT" => "KC_LBRC",
-        "RBKT" => "KC_RBRC",
-        "BSLH" => "KC_BSLS",
-        "SEMI" => "KC_SCLN",
-        "SQT" => "KC_QUOTE",
-        "GRAVE" => "KC_GRAVE",
-        "COMMA" => "KC_COMMA",
-        "DOT" => "KC_DOT",
-        "FSLH" => "KC_SLASH",
-        // Shifted symbols
-        "EXCL" => "KC_EXLM",
-        "AT" => "KC_AT",
-        "HASH" => "KC_HASH",
-        "DLLR" => "KC_DLR",
-        "PRCNT" => "KC_PERC",
-        "CARET" => "KC_CIRC",
-        "AMPS" => "KC_AMPR",
-        "STAR" => "KC_ASTR",
-        "LPAR" => "KC_LPRN",
-        "RPAR" => "KC_RPRN",
-        "UNDER" => "KC_UNDS",
-        "PLUS" => "KC_PLUS",
-        "LBRC" => "KC_LCBR",
-        "RBRC" => "KC_RCBR",
-        "PIPE" => "KC_PIPE",
-        "TILDE" => "KC_TILD",
-        "LT" => "KC_LT",
-        "GT" => "KC_GT",
-        "DQT" => "KC_DQUO",
-        "COLON" => "KC_COLN",
-        "QMARK" => "KC_QUES",
-        // Navigation
-        "LEFT" => "KC_LEFT",
-        "RIGHT" => "KC_RIGHT",
-        "UP" => "KC_UP",
-        "DOWN" => "KC_DOWN",
-        "PG_UP" => "KC_PGUP",
-        "PG_DN" => "KC_PGDN",
-        "HOME" => "KC_HOME",
-        "END" => "KC_END",
-        // Modifiers
-        "LCTRL" => "KC_LCTL",
-        "RCTRL" => "KC_RCTL",
-        "LSHFT" => "KC_LSFT",
-        "RSHFT" => "KC_RSFT",
-        "LALT" => "KC_LALT",
-        "RALT" => "KC_RALT",
-        "LGUI" => "KC_LGUI",
-        "RGUI" => "KC_RGUI",
-        // Media
-        "C_VOL_UP" => "KC_VOLU",
-        "C_VOL_DN" => "KC_VOLD",
-        "C_MUTE" => "KC_MUTE",
-        "C_BRI_UP" => "KC_BRIU",
-        "C_BRI_DN" => "KC_BRID",
-        "C_PP" => "KC_MPLY",
-        "C_NEXT" => "KC_MNXT",
-        "C_PREV" => "KC_MPRV",
-        // Keypad
-        "KP_N0" => "KC_KP_0",
-        "KP_N1" => "KC_KP_1",
-        "KP_N2" => "KC_KP_2",
-        "KP_N3" => "KC_KP_3",
-        "KP_N4" => "KC_KP_4",
-        "KP_N5" => "KC_KP_5",
-        "KP_N6" => "KC_KP_6",
-        "KP_N7" => "KC_KP_7",
-        "KP_N8" => "KC_KP_8",
-        "KP_N9" => "KC_KP_9",
-        "KP_SLASH" => "KC_KP_SLASH",
-        "KP_MULTIPLY" => "KC_KP_ASTERISK",
-        "KP_MINUS" => "KC_KP_MINUS",
-        "KP_PLUS" => "KC_KP_PLUS",
-        "KP_ENTER" => "KC_KP_ENTER",
-        "KP_DOT" => "KC_KP_DOT",
-        // Application control
-        "K_REDO" => "KC_AGAIN",
-        "K_UNDO" => "KC_UNDO",
-        "K_CUT" => "KC_CUT",
-        "K_COPY" => "KC_COPY",
-        "K_PASTE" => "KC_PASTE",
-        // Non-US keys
-        "NON_US_BSLH" => "KC_NUBS",
-        "NON_US_HASH" => "KC_NUHS",
-        // Misc
-        "PSCRN" => "KC_PSCR",
-        "SLCK" => "KC_SCRL",
-        "PAUSE_BREAK" => "KC_PAUS",
-        "K_APP" => "KC_APP",
-        unsupported => {
-            let _ = unsupported.len();
-            return None;
-        }
-    })
+impl fmt::Display for Modifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
 }
 
-/// Map a ZMK modifier name to a QMK `MOD_*` constant.
-///
-/// Unknown modifiers fall back to `MOD_LCTL`, matching the converter's current
-/// best-effort behavior for QMK constructs that require a valid modifier token.
-#[must_use]
-pub fn zmk_mod_to_qmk(zmk_mod: &str) -> &'static str {
-    match zmk_mod.trim() {
-        "LALT" => "MOD_LALT",
-        "RALT" => "MOD_RALT",
-        "RCTRL" => "MOD_RCTL",
-        "LSHFT" => "MOD_LSFT",
-        "RSHFT" => "MOD_RSFT",
-        "LGUI" => "MOD_LGUI",
-        "RGUI" => "MOD_RGUI",
-        unsupported => {
-            let _ = unsupported.len();
-            "MOD_LCTL"
+impl From<&str> for Modifier {
+    fn from(value: &str) -> Self {
+        Self::from_zmk(value)
+            .or_else(|| Self::from_qmk(value))
+            .unwrap_or_else(|| Self::Unknown(value.to_string()))
+    }
+}
+
+impl From<String> for Modifier {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl PartialEq<&str> for Modifier {
+    fn eq(&self, other: &&str) -> bool {
+        self.zmk_name() == *other
+    }
+}
+
+impl PartialEq<str> for Modifier {
+    fn eq(&self, other: &str) -> bool {
+        self.zmk_name() == other
+    }
+}
+
+/// A ZMK modifier-wrapper prefix used in key expressions like `LG(C)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ModPrefix {
+    LG,
+    RG,
+    LS,
+    RS,
+    LC,
+    RC,
+    LA,
+    RA,
+}
+
+impl ModPrefix {
+    #[must_use]
+    pub fn from_qmk_fn(name: &str) -> Option<Self> {
+        Some(match name {
+            "LGUI" => Self::LG,
+            "RGUI" => Self::RG,
+            "LSFT" | "LSHIFT" => Self::LS,
+            "RSFT" | "RSHIFT" => Self::RS,
+            "LCTL" | "LCTRL" => Self::LC,
+            "RCTL" | "RCTRL" => Self::RC,
+            "LALT" => Self::LA,
+            "RALT" => Self::RA,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn from_zmk(prefix: &str) -> Option<Self> {
+        Some(match prefix {
+            "LG" => Self::LG,
+            "RG" => Self::RG,
+            "LS" => Self::LS,
+            "RS" => Self::RS,
+            "LC" => Self::LC,
+            "RC" => Self::RC,
+            "LA" => Self::LA,
+            "RA" => Self::RA,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub const fn zmk_name(self) -> &'static str {
+        match self {
+            Self::LG => "LG",
+            Self::RG => "RG",
+            Self::LS => "LS",
+            Self::RS => "RS",
+            Self::LC => "LC",
+            Self::RC => "RC",
+            Self::LA => "LA",
+            Self::RA => "RA",
+        }
+    }
+
+    #[must_use]
+    pub const fn qmk_fn_name(self) -> &'static str {
+        match self {
+            Self::LG => "LGUI",
+            Self::RG => "RGUI",
+            Self::LS => "LSFT",
+            Self::RS => "RSFT",
+            Self::LC => "LCTL",
+            Self::RC => "RCTL",
+            Self::LA => "LALT",
+            Self::RA => "RALT",
         }
     }
 }
 
-/// Convert a ZMK key expression (simple or modifier-wrapped) to a QMK keycode string.
-///
-/// Handles nested modifier prefixes like `LG(LS(LBKT))` → `LGUI(LSFT(KC_LBRC))`.
-/// Falls back to the raw ZMK name for unknown keys.
-#[must_use]
-pub fn zmk_key_expr_to_qmk(zmk: &str) -> String {
-    if let Some(paren) = zmk.find('(') {
-        let prefix = &zmk[..paren];
-        let converted = zmk_mod_prefix_to_qmk_fn(prefix).and_then(|qmk_fn| {
-            extract_paren_inner(zmk, paren)
-                .map(|inner| format!("{qmk_fn}({})", zmk_key_expr_to_qmk(inner)))
-        });
-        if let Some(result) = converted {
-            return result;
-        }
-    }
-    zmk_key_to_qmk(zmk).unwrap_or(zmk).to_string()
+/// A typed key expression. Most expressions are a keycode, optionally wrapped in
+/// one or more modifier prefixes. `Raw` is reserved for source constructs that
+/// are not modeled yet but still need to round-trip visibly.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum KeyExpr {
+    Key(KeyCode),
+    Modified(ModPrefix, Box<KeyExpr>),
+    Raw(String),
 }
 
-fn zmk_mod_prefix_to_qmk_fn(prefix: &str) -> Option<&'static str> {
-    Some(match prefix {
-        "LG" => "LGUI",
-        "RG" => "RGUI",
-        "LS" => "LSFT",
-        "RS" => "RSFT",
-        "LC" => "LCTL",
-        "RC" => "RCTL",
-        "LA" => "LALT",
-        "RA" => "RALT",
-        unsupported => {
-            let _ = unsupported.len();
-            return None;
+impl KeyExpr {
+    #[must_use]
+    pub fn from_qmk_key(qmk: &str) -> Option<Self> {
+        KeyCode::from_qmk(qmk).map(Self::Key)
+    }
+
+    #[must_use]
+    pub fn from_zmk_key(zmk: &str) -> Option<Self> {
+        KeyCode::from_zmk(zmk).map(Self::Key)
+    }
+
+    #[must_use]
+    pub fn parse_zmk(s: &str) -> Self {
+        let s = s.trim();
+        if let Some(paren) = s.find('(')
+            && let Some(prefix) = ModPrefix::from_zmk(&s[..paren])
+            && let Some(inner) = extract_paren_inner(s, paren)
+        {
+            return Self::Modified(prefix, Box::new(Self::parse_zmk(inner)));
         }
-    })
+        Self::from_zmk_key(s).unwrap_or_else(|| Self::Raw(s.to_string()))
+    }
+
+    #[must_use]
+    pub fn to_zmk_string(&self) -> String {
+        match self {
+            Self::Key(code) => code.zmk_name().to_string(),
+            Self::Modified(prefix, inner) => {
+                format!("{}({})", prefix.zmk_name(), inner.to_zmk_string())
+            }
+            Self::Raw(raw) => raw.clone(),
+        }
+    }
+
+    #[must_use]
+    pub fn to_qmk_string(&self) -> String {
+        match self {
+            Self::Key(code) => code.qmk_name().to_string(),
+            Self::Modified(prefix, inner) => {
+                format!("{}({})", prefix.qmk_fn_name(), inner.to_qmk_string())
+            }
+            Self::Raw(raw) => raw.clone(),
+        }
+    }
+}
+
+impl ToZmk for KeyExpr {
+    fn to_zmk(&self) -> String {
+        self.to_zmk_string()
+    }
+}
+
+impl ToQmk for KeyExpr {
+    fn to_qmk(&self) -> String {
+        self.to_qmk_string()
+    }
+}
+
+impl fmt::Display for KeyExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_zmk_string())
+    }
+}
+
+/// ZMK RGB underglow actions modeled by the converter.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RgbAction {
+    Toggle,
+    HueInc,
+    HueDec,
+    SatInc,
+    SatDec,
+    ValInc,
+    ValDec,
+    EffectNext,
+    EffectPrev,
+    SpeedInc,
+    SpeedDec,
+    Unknown(String),
+}
+
+impl RgbAction {
+    #[must_use]
+    pub fn from_qmk(name: &str) -> Option<Self> {
+        Some(match name {
+            "RGB_TOG" => Self::Toggle,
+            "RGB_HUI" => Self::HueInc,
+            "RGB_HUD" => Self::HueDec,
+            "RGB_SAI" => Self::SatInc,
+            "RGB_SAD" => Self::SatDec,
+            "RGB_VAI" => Self::ValInc,
+            "RGB_VAD" => Self::ValDec,
+            "RGB_MODE_FORWARD" | "RGB_MOD" => Self::EffectNext,
+            "RGB_MODE_REVERSE" | "RGB_RMOD" => Self::EffectPrev,
+            "RGB_SPI" => Self::SpeedInc,
+            "RGB_SPD" => Self::SpeedDec,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn from_zmk(name: &str) -> Option<Self> {
+        Some(match name {
+            "RGB_TOG" => Self::Toggle,
+            "RGB_HUI" => Self::HueInc,
+            "RGB_HUD" => Self::HueDec,
+            "RGB_SAI" => Self::SatInc,
+            "RGB_SAD" => Self::SatDec,
+            "RGB_VAI" => Self::ValInc,
+            "RGB_VAD" => Self::ValDec,
+            "RGB_EFF" => Self::EffectNext,
+            "RGB_EFR" => Self::EffectPrev,
+            "RGB_SPI" => Self::SpeedInc,
+            "RGB_SPD" => Self::SpeedDec,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn zmk_name(&self) -> &str {
+        match self {
+            Self::Toggle => "RGB_TOG",
+            Self::HueInc => "RGB_HUI",
+            Self::HueDec => "RGB_HUD",
+            Self::SatInc => "RGB_SAI",
+            Self::SatDec => "RGB_SAD",
+            Self::ValInc => "RGB_VAI",
+            Self::ValDec => "RGB_VAD",
+            Self::EffectNext => "RGB_EFF",
+            Self::EffectPrev => "RGB_EFR",
+            Self::SpeedInc => "RGB_SPI",
+            Self::SpeedDec => "RGB_SPD",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn qmk_name(&self) -> &str {
+        match self {
+            Self::Toggle => "RGB_TOG",
+            Self::HueInc => "RGB_HUI",
+            Self::HueDec => "RGB_HUD",
+            Self::SatInc => "RGB_SAI",
+            Self::SatDec => "RGB_SAD",
+            Self::ValInc => "RGB_VAI",
+            Self::ValDec => "RGB_VAD",
+            Self::EffectNext => "RGB_MODE_FORWARD",
+            Self::EffectPrev => "RGB_MODE_REVERSE",
+            Self::SpeedInc => "RGB_SPI",
+            Self::SpeedDec => "RGB_SPD",
+            Self::Unknown(raw) => raw,
+        }
+    }
+}
+
+impl ToZmk for RgbAction {
+    fn to_zmk(&self) -> String {
+        self.zmk_name().to_string()
+    }
+}
+
+impl ToQmk for RgbAction {
+    fn to_qmk(&self) -> String {
+        self.qmk_name().to_string()
+    }
+}
+
+impl fmt::Display for RgbAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
+}
+
+impl From<&str> for RgbAction {
+    fn from(value: &str) -> Self {
+        Self::from_zmk(value)
+            .or_else(|| Self::from_qmk(value))
+            .unwrap_or_else(|| Self::Unknown(value.to_string()))
+    }
+}
+
+impl From<String> for RgbAction {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl PartialEq<&str> for RgbAction {
+    fn eq(&self, other: &&str) -> bool {
+        self.zmk_name() == *other
+    }
+}
+
+impl PartialEq<str> for RgbAction {
+    fn eq(&self, other: &str) -> bool {
+        self.zmk_name() == other
+    }
+}
+
+/// ZMK mouse movement directions modeled by the converter.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MouseMovement {
+    Up,
+    Down,
+    Left,
+    Right,
+    Unknown(String),
+}
+
+impl MouseMovement {
+    #[must_use]
+    pub fn from_zmk(name: &str) -> Option<Self> {
+        Some(match name {
+            "MOVE_UP" => Self::Up,
+            "MOVE_DOWN" => Self::Down,
+            "MOVE_LEFT" => Self::Left,
+            "MOVE_RIGHT" => Self::Right,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn from_qmk(name: &str) -> Option<Self> {
+        let key = name.strip_prefix("KC_").unwrap_or(name);
+        Some(match key {
+            "MS_U" | "MS_UP" => Self::Up,
+            "MS_D" | "MS_DOWN" => Self::Down,
+            "MS_L" | "MS_LEFT" => Self::Left,
+            "MS_R" | "MS_RIGHT" => Self::Right,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn zmk_name(&self) -> &str {
+        match self {
+            Self::Up => "MOVE_UP",
+            Self::Down => "MOVE_DOWN",
+            Self::Left => "MOVE_LEFT",
+            Self::Right => "MOVE_RIGHT",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn qmk_name(&self) -> &str {
+        match self {
+            Self::Up => "KC_MS_U",
+            Self::Down => "KC_MS_D",
+            Self::Left => "KC_MS_L",
+            Self::Right => "KC_MS_R",
+            Self::Unknown(raw) => raw,
+        }
+    }
+}
+
+/// ZMK mouse button names modeled by the converter.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+    Button4,
+    Button5,
+    Unknown(String),
+}
+
+impl MouseButton {
+    #[must_use]
+    pub fn from_zmk(name: &str) -> Option<Self> {
+        Some(match name {
+            "LCLK" => Self::Left,
+            "RCLK" => Self::Right,
+            "MCLK" => Self::Middle,
+            "BTN4" => Self::Button4,
+            "BTN5" => Self::Button5,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn from_qmk(name: &str) -> Option<Self> {
+        let key = name.strip_prefix("KC_").unwrap_or(name);
+        Some(match key {
+            "BTN1" => Self::Left,
+            "BTN2" => Self::Right,
+            "BTN3" => Self::Middle,
+            "BTN4" => Self::Button4,
+            "BTN5" => Self::Button5,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn zmk_name(&self) -> &str {
+        match self {
+            Self::Left => "LCLK",
+            Self::Right => "RCLK",
+            Self::Middle => "MCLK",
+            Self::Button4 => "BTN4",
+            Self::Button5 => "BTN5",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn qmk_name(&self) -> &str {
+        match self {
+            Self::Left => "KC_BTN1",
+            Self::Right => "KC_BTN2",
+            Self::Middle => "KC_BTN3",
+            Self::Button4 => "KC_BTN4",
+            Self::Button5 => "KC_BTN5",
+            Self::Unknown(raw) => raw,
+        }
+    }
+}
+
+/// ZMK mouse scroll directions modeled by the converter.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MouseScroll {
+    Up,
+    Down,
+    Left,
+    Right,
+    Unknown(String),
+}
+
+impl MouseScroll {
+    #[must_use]
+    pub fn from_zmk(name: &str) -> Option<Self> {
+        Some(match name {
+            "SCRL_UP" => Self::Up,
+            "SCRL_DOWN" => Self::Down,
+            "SCRL_LEFT" => Self::Left,
+            "SCRL_RIGHT" => Self::Right,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn from_qmk(name: &str) -> Option<Self> {
+        let key = name.strip_prefix("KC_").unwrap_or(name);
+        Some(match key {
+            "WH_U" | "MS_WH_UP" => Self::Up,
+            "WH_D" | "MS_WH_DOWN" => Self::Down,
+            "WH_L" | "MS_WH_LEFT" => Self::Left,
+            "WH_R" | "MS_WH_RIGHT" => Self::Right,
+            unsupported => {
+                let _ = unsupported.len();
+                return None;
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn zmk_name(&self) -> &str {
+        match self {
+            Self::Up => "SCRL_UP",
+            Self::Down => "SCRL_DOWN",
+            Self::Left => "SCRL_LEFT",
+            Self::Right => "SCRL_RIGHT",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn qmk_name(&self) -> &str {
+        match self {
+            Self::Up => "KC_WH_U",
+            Self::Down => "KC_WH_D",
+            Self::Left => "KC_WH_L",
+            Self::Right => "KC_WH_R",
+            Self::Unknown(raw) => raw,
+        }
+    }
+}
+
+impl ToZmk for MouseMovement {
+    fn to_zmk(&self) -> String {
+        self.zmk_name().to_string()
+    }
+}
+
+impl ToQmk for MouseMovement {
+    fn to_qmk(&self) -> String {
+        self.qmk_name().to_string()
+    }
+}
+
+impl ToZmk for MouseButton {
+    fn to_zmk(&self) -> String {
+        self.zmk_name().to_string()
+    }
+}
+
+impl ToQmk for MouseButton {
+    fn to_qmk(&self) -> String {
+        self.qmk_name().to_string()
+    }
+}
+
+impl ToZmk for MouseScroll {
+    fn to_zmk(&self) -> String {
+        self.zmk_name().to_string()
+    }
+}
+
+impl ToQmk for MouseScroll {
+    fn to_qmk(&self) -> String {
+        self.qmk_name().to_string()
+    }
+}
+
+impl fmt::Display for MouseMovement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
+}
+
+impl fmt::Display for MouseButton {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
+}
+
+impl fmt::Display for MouseScroll {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
+}
+
+impl From<&str> for MouseMovement {
+    fn from(value: &str) -> Self {
+        Self::from_zmk(value)
+            .or_else(|| Self::from_qmk(value))
+            .unwrap_or_else(|| Self::Unknown(value.to_string()))
+    }
+}
+
+impl From<String> for MouseMovement {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl From<&str> for MouseButton {
+    fn from(value: &str) -> Self {
+        Self::from_zmk(value)
+            .or_else(|| Self::from_qmk(value))
+            .unwrap_or_else(|| Self::Unknown(value.to_string()))
+    }
+}
+
+impl From<String> for MouseButton {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl From<&str> for MouseScroll {
+    fn from(value: &str) -> Self {
+        Self::from_zmk(value)
+            .or_else(|| Self::from_qmk(value))
+            .unwrap_or_else(|| Self::Unknown(value.to_string()))
+    }
+}
+
+impl From<String> for MouseScroll {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl PartialEq<&str> for MouseMovement {
+    fn eq(&self, other: &&str) -> bool {
+        self.zmk_name() == *other
+    }
+}
+
+impl PartialEq<str> for MouseMovement {
+    fn eq(&self, other: &str) -> bool {
+        self.zmk_name() == other
+    }
+}
+
+impl PartialEq<&str> for MouseButton {
+    fn eq(&self, other: &&str) -> bool {
+        self.zmk_name() == *other
+    }
+}
+
+impl PartialEq<str> for MouseButton {
+    fn eq(&self, other: &str) -> bool {
+        self.zmk_name() == other
+    }
+}
+
+impl PartialEq<&str> for MouseScroll {
+    fn eq(&self, other: &&str) -> bool {
+        self.zmk_name() == *other
+    }
+}
+
+impl PartialEq<str> for MouseScroll {
+    fn eq(&self, other: &str) -> bool {
+        self.zmk_name() == other
+    }
 }
 
 /// Return the text inside the outer parenthesized expression starting at `open`.
@@ -516,28 +1123,6 @@ fn extract_paren_inner(s: &str, open: usize) -> Option<&str> {
         }
     }
     None
-}
-
-/// Map a ZMK `rgb_ug` action string back to a QMK RGB keycode.
-#[must_use]
-pub fn zmk_rgb_to_qmk(zmk: &str) -> Option<&'static str> {
-    Some(match zmk {
-        "RGB_TOG" => "RGB_TOG",
-        "RGB_HUI" => "RGB_HUI",
-        "RGB_HUD" => "RGB_HUD",
-        "RGB_SAI" => "RGB_SAI",
-        "RGB_SAD" => "RGB_SAD",
-        "RGB_VAI" => "RGB_VAI",
-        "RGB_VAD" => "RGB_VAD",
-        "RGB_EFF" => "RGB_MODE_FORWARD",
-        "RGB_EFR" => "RGB_MODE_REVERSE",
-        "RGB_SPI" => "RGB_SPI",
-        "RGB_SPD" => "RGB_SPD",
-        unsupported => {
-            let _ = unsupported.len();
-            return None;
-        }
-    })
 }
 
 /// Known keyboards and their default output column counts.
@@ -575,201 +1160,68 @@ mod tests {
     use super::*;
 
     #[test]
-    fn letters_pass_through() {
-        assert_eq!(qmk_key_to_zmk("KC_A"), Some("A"));
-        assert_eq!(qmk_key_to_zmk("KC_Z"), Some("Z"));
+    fn qmk_key_aliases_parse_to_canonical_domain() {
+        assert_eq!(KeyCode::from_qmk("KC_A"), Some(KeyCode::A));
+        assert_eq!(KeyCode::from_qmk("KC_0"), Some(KeyCode::N0));
+        assert_eq!(KeyCode::from_qmk("KC_ENTER"), Some(KeyCode::Ret));
+        assert_eq!(KeyCode::from_qmk("KC_LBRC"), Some(KeyCode::Lbkt));
+        assert_eq!(KeyCode::from_qmk("KC_LCBR"), Some(KeyCode::Lbrc));
+        assert_eq!(KeyCode::from_qmk("KC_AUDIO_VOL_UP"), Some(KeyCode::CVolUp));
+        assert_eq!(KeyCode::from_qmk("KC_DOESNOTEXIST"), None);
     }
 
     #[test]
-    fn numbers_get_n_prefix() {
-        assert_eq!(qmk_key_to_zmk("KC_0"), Some("N0"));
-        assert_eq!(qmk_key_to_zmk("KC_9"), Some("N9"));
+    fn keycodes_render_to_both_domains() {
+        assert_eq!(KeyCode::Lbkt.to_zmk(), "LBKT");
+        assert_eq!(KeyCode::Lbkt.to_qmk(), "KC_LBRC");
+        assert_eq!(KeyCode::Ret.to_zmk(), "RET");
+        assert_eq!(KeyCode::Ret.to_qmk(), "KC_ENTER");
     }
 
     #[test]
-    fn punctuation_remapped() {
-        assert_eq!(qmk_key_to_zmk("KC_SCLN"), Some("SEMI"));
-        assert_eq!(qmk_key_to_zmk("KC_QUOTE"), Some("SQT"));
-        assert_eq!(qmk_key_to_zmk("KC_LBRC"), Some("LBKT"));
-        assert_eq!(qmk_key_to_zmk("KC_RBRC"), Some("RBKT"));
-        assert_eq!(qmk_key_to_zmk("KC_BSLS"), Some("BSLH"));
-        assert_eq!(qmk_key_to_zmk("KC_GRAVE"), Some("GRAVE"));
+    fn zmk_key_names_parse_to_canonical_domain() {
+        assert_eq!(KeyCode::from_zmk("N9"), Some(KeyCode::N9));
+        assert_eq!(KeyCode::from_zmk("SQT"), Some(KeyCode::Sqt));
+        assert_eq!(KeyCode::from_zmk("NON_US_BSLH"), Some(KeyCode::NonUsBslh));
+        assert_eq!(KeyCode::from_zmk("NOT_A_KEY"), None);
     }
 
     #[test]
-    fn shifted_symbols_remapped() {
-        assert_eq!(qmk_key_to_zmk("KC_EXLM"), Some("EXCL"));
-        assert_eq!(qmk_key_to_zmk("KC_LCBR"), Some("LBRC"));
-        assert_eq!(qmk_key_to_zmk("KC_RCBR"), Some("RBRC"));
-        assert_eq!(qmk_key_to_zmk("KC_PIPE"), Some("PIPE"));
-        assert_eq!(qmk_key_to_zmk("KC_TILD"), Some("TILDE"));
-        assert_eq!(qmk_key_to_zmk("KC_AMPR"), Some("AMPS"));
-        assert_eq!(qmk_key_to_zmk("KC_ASTR"), Some("STAR"));
-        assert_eq!(qmk_key_to_zmk("KC_LPRN"), Some("LPAR"));
-        assert_eq!(qmk_key_to_zmk("KC_UNDS"), Some("UNDER"));
+    fn modifiers_parse_and_render() {
+        assert_eq!(Modifier::from_qmk("MOD_LSFT"), Some(Modifier::LShft));
+        assert_eq!(Modifier::from_zmk("LCTRL"), Some(Modifier::LCtrl));
+        assert_eq!(Modifier::LGui.to_zmk(), "LGUI");
+        assert_eq!(Modifier::LGui.to_qmk(), "MOD_LGUI");
     }
 
     #[test]
-    fn navigation_remapped() {
-        assert_eq!(qmk_key_to_zmk("KC_PGUP"), Some("PG_UP"));
-        assert_eq!(qmk_key_to_zmk("KC_PAGE_UP"), Some("PG_UP"));
-        assert_eq!(qmk_key_to_zmk("KC_PGDN"), Some("PG_DN"));
-        assert_eq!(qmk_key_to_zmk("KC_PAGE_DOWN"), Some("PG_DN"));
+    fn mod_prefixes_parse_and_render() {
+        assert_eq!(ModPrefix::from_qmk_fn("LGUI"), Some(ModPrefix::LG));
+        assert_eq!(ModPrefix::from_zmk("RS"), Some(ModPrefix::RS));
+        assert_eq!(ModPrefix::LG.zmk_name(), "LG");
+        assert_eq!(ModPrefix::LG.qmk_fn_name(), "LGUI");
+        assert_eq!(ModPrefix::from_qmk_fn("KC_A"), None);
     }
 
     #[test]
-    fn media_remapped() {
-        assert_eq!(qmk_key_to_zmk("KC_AUDIO_VOL_UP"), Some("C_VOL_UP"));
-        assert_eq!(qmk_key_to_zmk("KC_AUDIO_VOL_DOWN"), Some("C_VOL_DN"));
-        assert_eq!(qmk_key_to_zmk("KC_BRIGHTNESS_UP"), Some("C_BRI_UP"));
-        assert_eq!(qmk_key_to_zmk("KC_BRIGHTNESS_DOWN"), Some("C_BRI_DN"));
+    fn rgb_actions_parse_and_render() {
+        assert_eq!(RgbAction::from_qmk("RGB_MOD"), Some(RgbAction::EffectNext));
+        assert_eq!(RgbAction::from_qmk("RGB_RMOD"), Some(RgbAction::EffectPrev));
+        assert_eq!(RgbAction::from_zmk("RGB_SPI"), Some(RgbAction::SpeedInc));
+        assert_eq!(RgbAction::EffectNext.to_zmk(), "RGB_EFF");
+        assert_eq!(RgbAction::EffectNext.to_qmk(), "RGB_MODE_FORWARD");
+        assert_eq!(RgbAction::from_qmk("NOT_RGB"), None);
     }
 
     #[test]
-    fn common_keys() {
-        assert_eq!(qmk_key_to_zmk("KC_TAB"), Some("TAB"));
-        assert_eq!(qmk_key_to_zmk("KC_ENTER"), Some("RET"));
-        assert_eq!(qmk_key_to_zmk("KC_ESCAPE"), Some("ESC"));
-        assert_eq!(qmk_key_to_zmk("KC_BSPC"), Some("BSPC"));
-        assert_eq!(qmk_key_to_zmk("KC_SPACE"), Some("SPACE"));
-    }
-
-    #[test]
-    fn unknown_returns_none() {
-        assert_eq!(qmk_key_to_zmk("KC_DOESNOTEXIST"), None);
-        assert_eq!(qmk_key_to_zmk("TOTALLY_MADE_UP"), None);
-    }
-
-    #[test]
-    fn mod_constants_remapped() {
-        assert_eq!(qmk_mod_to_zmk("MOD_LALT"), "LALT");
-        assert_eq!(qmk_mod_to_zmk("MOD_LGUI"), "LGUI");
-        assert_eq!(qmk_mod_to_zmk("MOD_LCTL"), "LCTRL");
-        assert_eq!(qmk_mod_to_zmk("MOD_LSFT"), "LSHFT");
-        assert_eq!(qmk_mod_to_zmk("MOD_RALT"), "RALT");
-        assert_eq!(qmk_mod_to_zmk("MOD_RGUI"), "RGUI");
-    }
-
-    #[test]
-    fn mod_fn_prefixes() {
-        assert_eq!(qmk_mod_fn_to_zmk("LGUI"), Some("LG"));
-        assert_eq!(qmk_mod_fn_to_zmk("LSFT"), Some("LS"));
-        assert_eq!(qmk_mod_fn_to_zmk("LCTL"), Some("LC"));
-        assert_eq!(qmk_mod_fn_to_zmk("LALT"), Some("LA"));
-        assert_eq!(qmk_mod_fn_to_zmk("RGUI"), Some("RG"));
-        assert_eq!(qmk_mod_fn_to_zmk("RSFT"), Some("RS"));
-        assert_eq!(qmk_mod_fn_to_zmk("KC_A"), None);
-    }
-
-    #[test]
-    fn rgb_actions() {
-        assert_eq!(qmk_rgb_to_zmk("RGB_TOG"), Some("RGB_TOG"));
-        assert_eq!(qmk_rgb_to_zmk("RGB_HUI"), Some("RGB_HUI"));
-        assert_eq!(qmk_rgb_to_zmk("RGB_MODE_FORWARD"), Some("RGB_EFF"));
-        assert_eq!(qmk_rgb_to_zmk("RGB_MOD"), Some("RGB_EFF"));
-        assert_eq!(qmk_rgb_to_zmk("RGB_RMOD"), Some("RGB_EFR"));
-        assert_eq!(qmk_rgb_to_zmk("NOT_RGB"), None);
-    }
-
-    #[test]
-    fn reverse_letters() {
-        assert_eq!(zmk_key_to_qmk("A"), Some("KC_A"));
-        assert_eq!(zmk_key_to_qmk("Z"), Some("KC_Z"));
-    }
-
-    #[test]
-    fn reverse_numbers_strip_n_prefix() {
-        assert_eq!(zmk_key_to_qmk("N0"), Some("KC_0"));
-        assert_eq!(zmk_key_to_qmk("N9"), Some("KC_9"));
-    }
-
-    #[test]
-    fn reverse_punctuation() {
-        assert_eq!(zmk_key_to_qmk("SEMI"), Some("KC_SCLN"));
-        assert_eq!(zmk_key_to_qmk("SQT"), Some("KC_QUOTE"));
-        assert_eq!(zmk_key_to_qmk("LBKT"), Some("KC_LBRC"));
-        assert_eq!(zmk_key_to_qmk("RBKT"), Some("KC_RBRC"));
-        assert_eq!(zmk_key_to_qmk("BSLH"), Some("KC_BSLS"));
-        assert_eq!(zmk_key_to_qmk("RET"), Some("KC_ENTER"));
-        assert_eq!(zmk_key_to_qmk("FSLH"), Some("KC_SLASH"));
-    }
-
-    #[test]
-    fn reverse_media() {
-        assert_eq!(zmk_key_to_qmk("C_VOL_UP"), Some("KC_VOLU"));
-        assert_eq!(zmk_key_to_qmk("C_VOL_DN"), Some("KC_VOLD"));
-        assert_eq!(zmk_key_to_qmk("C_MUTE"), Some("KC_MUTE"));
-    }
-
-    #[test]
-    fn reverse_mod_constants() {
-        assert_eq!(zmk_mod_to_qmk("LALT"), "MOD_LALT");
-        assert_eq!(zmk_mod_to_qmk("LCTRL"), "MOD_LCTL");
-        assert_eq!(zmk_mod_to_qmk("LSHFT"), "MOD_LSFT");
-        assert_eq!(zmk_mod_to_qmk("LGUI"), "MOD_LGUI");
-    }
-
-    #[test]
-    fn reverse_rgb() {
-        assert_eq!(zmk_rgb_to_qmk("RGB_TOG"), Some("RGB_TOG"));
-        assert_eq!(zmk_rgb_to_qmk("RGB_EFF"), Some("RGB_MODE_FORWARD"));
-        assert_eq!(zmk_rgb_to_qmk("RGB_EFR"), Some("RGB_MODE_REVERSE"));
-        assert_eq!(zmk_rgb_to_qmk("UNKNOWN"), None);
-    }
-
-    #[test]
-    fn reverse_unknown_returns_none() {
-        assert_eq!(zmk_key_to_qmk("NOT_A_KEY"), None);
-        assert_eq!(zmk_key_to_qmk("LC(C)"), None);
-    }
-
-    #[test]
-    fn application_keys() {
-        assert_eq!(qmk_key_to_zmk("KC_UNDO"), Some("K_UNDO"));
-        assert_eq!(qmk_key_to_zmk("KC_AGAIN"), Some("K_REDO"));
-        assert_eq!(qmk_key_to_zmk("KC_CUT"), Some("K_CUT"));
-        assert_eq!(qmk_key_to_zmk("KC_COPY"), Some("K_COPY"));
-        assert_eq!(qmk_key_to_zmk("KC_PASTE"), Some("K_PASTE"));
-    }
-
-    #[test]
-    fn non_us_keys() {
-        assert_eq!(qmk_key_to_zmk("KC_NUBS"), Some("NON_US_BSLH"));
-        assert_eq!(qmk_key_to_zmk("KC_NUHS"), Some("NON_US_HASH"));
-        assert_eq!(zmk_key_to_qmk("NON_US_BSLH"), Some("KC_NUBS"));
-        assert_eq!(zmk_key_to_qmk("NON_US_HASH"), Some("KC_NUHS"));
-    }
-
-    #[test]
-    fn rgb_speed_keys() {
-        assert_eq!(qmk_rgb_to_zmk("RGB_SPI"), Some("RGB_SPI"));
-        assert_eq!(qmk_rgb_to_zmk("RGB_SPD"), Some("RGB_SPD"));
-        assert_eq!(zmk_rgb_to_qmk("RGB_SPI"), Some("RGB_SPI"));
-        assert_eq!(zmk_rgb_to_qmk("RGB_SPD"), Some("RGB_SPD"));
-    }
-
-    #[test]
-    fn key_expr_simple() {
-        assert_eq!(zmk_key_expr_to_qmk("Q"), "KC_Q");
-        assert_eq!(zmk_key_expr_to_qmk("SPACE"), "KC_SPACE");
-        assert_eq!(zmk_key_expr_to_qmk("LBKT"), "KC_LBRC");
-    }
-
-    #[test]
-    fn key_expr_single_modifier() {
-        assert_eq!(zmk_key_expr_to_qmk("LC(C)"), "LCTL(KC_C)");
-        assert_eq!(zmk_key_expr_to_qmk("LG(SPACE)"), "LGUI(KC_SPACE)");
-        assert_eq!(zmk_key_expr_to_qmk("LS(TAB)"), "LSFT(KC_TAB)");
-    }
-
-    #[test]
-    fn key_expr_nested_modifiers() {
-        assert_eq!(zmk_key_expr_to_qmk("LG(LS(LBKT))"), "LGUI(LSFT(KC_LBRC))");
-        assert_eq!(zmk_key_expr_to_qmk("RG(RS(RBKT))"), "RGUI(RSFT(KC_RBRC))");
+    fn key_expr_simple_and_nested_modifiers_render_to_qmk() {
+        assert_eq!(KeyExpr::parse_zmk("Q").to_qmk(), "KC_Q");
+        assert_eq!(KeyExpr::parse_zmk("LG(SPACE)").to_qmk(), "LGUI(KC_SPACE)");
+        assert_eq!(KeyExpr::parse_zmk("LG(LS(LBKT))").to_qmk(), "LGUI(LSFT(KC_LBRC))");
     }
 
     #[test]
     fn key_expr_unknown_falls_back_to_raw() {
-        assert_eq!(zmk_key_expr_to_qmk("WEIRD"), "WEIRD");
+        assert_eq!(KeyExpr::parse_zmk("WEIRD").to_qmk(), "WEIRD");
     }
 }

@@ -11,7 +11,7 @@ pub mod parse_json;
 
 use std::fmt::Write as _;
 
-use crate::codes;
+use crate::codes::ToQmk as _;
 use crate::ir::{Key, Keyboard, TapDanceDef};
 
 /// Render a `Keyboard` as a QMK Configurator JSON string.
@@ -152,22 +152,19 @@ fn key_to_qmk_str(key: &Key, tap_dances: &[TapDanceDef]) -> String {
         Key::CapsWord => "CW_TOGG".into(),
         Key::Bootloader => "QK_BOOT".into(),
         Key::SysReset => "QK_RBT".into(),
-        Key::Kp(zmk) => codes::zmk_key_expr_to_qmk(zmk),
+        Key::Kp(key) => key.to_qmk(),
         Key::Mo(n) => format!("MO({n})"),
         Key::Tog(n) => format!("TG({n})"),
-        Key::Sk(m) => format!("OSM({})", codes::zmk_mod_to_qmk(m)),
+        Key::Sk(m) => format!("OSM({})", m.to_qmk()),
         Key::Sl(n) => format!("OSL({n})"),
         Key::To(n) => format!("TO({n})"),
         Key::Df(n) => format!("DF({n})"),
-        Key::Mmv(d) => zmk_mmv_to_qmk(d),
-        Key::Mkp(b) => zmk_mkp_to_qmk(b),
-        Key::Msc(d) => zmk_msc_to_qmk(d),
-        Key::Lt(n, k) => format!("LT({n},{})", codes::zmk_key_expr_to_qmk(k)),
-        Key::Mt(m, k) => {
-            let qm = codes::zmk_mod_to_qmk(m);
-            format!("MT({qm},{})", codes::zmk_key_expr_to_qmk(k))
-        }
-        Key::RgbUg(a) => codes::zmk_rgb_to_qmk(a).map_or_else(|| format!("/* {a} */"), Into::into),
+        Key::Mmv(d) => d.to_qmk(),
+        Key::Mkp(b) => b.to_qmk(),
+        Key::Msc(d) => d.to_qmk(),
+        Key::Lt(n, k) => format!("LT({n},{})", k.to_qmk()),
+        Key::Mt(m, k) => format!("MT({},{})", m.to_qmk(), k.to_qmk()),
+        Key::RgbUg(a) => a.to_qmk(),
         Key::Macro(name) => name.clone(),
         Key::TapDance(n) => tap_dances.get(*n).map_or_else(
             || format!("TD(DANCE_{n})"),
@@ -200,40 +197,6 @@ fn render_c_tap_dances(out: &mut String, keyboard: &Keyboard) {
         let _ = writeln!(out, "    [{}] = {action},", td.name.to_uppercase());
     }
     out.push_str("};\n\n");
-}
-
-/// Map a ZMK mouse-movement direction to a QMK mouse keycode string.
-fn zmk_mmv_to_qmk(dir: &str) -> String {
-    match dir {
-        "MOVE_UP" => "KC_MS_U".into(),
-        "MOVE_DOWN" => "KC_MS_D".into(),
-        "MOVE_LEFT" => "KC_MS_L".into(),
-        "MOVE_RIGHT" => "KC_MS_R".into(),
-        unsupported => format!("/* mmv {unsupported} */"),
-    }
-}
-
-/// Map a ZMK mouse-button name to a QMK mouse button keycode string.
-fn zmk_mkp_to_qmk(btn: &str) -> String {
-    match btn {
-        "LCLK" => "KC_BTN1".into(),
-        "RCLK" => "KC_BTN2".into(),
-        "MCLK" => "KC_BTN3".into(),
-        "BTN4" => "KC_BTN4".into(),
-        "BTN5" => "KC_BTN5".into(),
-        unsupported => format!("/* mkp {unsupported} */"),
-    }
-}
-
-/// Map a ZMK mouse-scroll direction to a QMK wheel keycode string.
-fn zmk_msc_to_qmk(dir: &str) -> String {
-    match dir {
-        "SCRL_UP" => "KC_WH_U".into(),
-        "SCRL_DOWN" => "KC_WH_D".into(),
-        "SCRL_LEFT" => "KC_WH_L".into(),
-        "SCRL_RIGHT" => "KC_WH_R".into(),
-        unsupported => format!("/* msc {unsupported} */"),
-    }
 }
 
 /// Convert a ZMK layer node name into a conventional QMK layer enum variant.

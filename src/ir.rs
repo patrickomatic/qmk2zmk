@@ -5,10 +5,12 @@
 //! QMK keycodes into these types, then the ZMK renderer writes ZMK bindings from
 //! them. The reverse path uses the same IR in the opposite direction.
 //!
-//! Most strings stored in [`Key`] variants use ZMK names rather than QMK names.
-//! For example, QMK `KC_1` is stored as `Key::Kp("N1")`, because ZMK renders it
-//! as `&kp N1`. This keeps renderers simple and makes the IR line up with ZMK's
-//! behavior vocabulary.
+//! Keycode-like values are represented by typed domain enums from [`crate::codes`].
+//! Unknown or custom source behavior still keeps the original spelling at the
+//! edges, but modeled keys, modifiers, RGB actions, and mouse actions are not
+//! arbitrary strings inside the IR.
+
+use crate::codes::{KeyExpr, Modifier, MouseButton, MouseMovement, MouseScroll, RgbAction};
 
 /// A complete keyboard keymap in the converter's neutral format.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,16 +57,15 @@ pub struct Layer {
 /// - `Mmv`, `Mkp`, and `Msc` are ZMK mouse movement, button, and scroll
 ///   behaviors.
 ///
-/// Keycode and modifier strings should already be normalized to ZMK spelling.
-/// See `src/codes.rs` for the QMK-to-ZMK name tables.
+/// Keycodes and modifiers are normalized into typed domain values. See
+/// [`crate::codes`] for the QMK/ZMK conversion traits and mapping tables.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Key {
-    /// Normal key press using a ZMK key name, such as `A`, `N1`, `RET`, or
-    /// `LG(C)`.
+    /// Normal key press, such as `A`, `N1`, `RET`, or `LG(C)`.
     ///
     /// Examples: QMK `KC_A` and ZMK `&kp A` both become `Kp("A")`; QMK
     /// `LGUI(KC_C)` becomes `Kp("LG(C)")`.
-    Kp(String),
+    Kp(KeyExpr),
     /// Momentarily switch to a layer while held.
     ///
     /// QMK `MO(_LOWER)` and ZMK `&mo 1` become `Mo(1)` when `_LOWER` resolves to
@@ -74,12 +75,12 @@ pub enum Key {
     ///
     /// QMK `LT(_LOWER, KC_SPACE)` and ZMK `&lt 1 SPACE` become
     /// `Lt(1, "SPACE")`.
-    Lt(usize, String),
+    Lt(usize, KeyExpr),
     /// Mod-tap: hold for a modifier, tap for a key.
     ///
     /// QMK `MT(MOD_LSFT, KC_Z)` and ZMK `&mt LSHFT Z` become
     /// `Mt("LSHFT", "Z")`.
-    Mt(String, String),
+    Mt(Modifier, KeyExpr),
     /// Toggle a layer on or off.
     ///
     /// QMK `TG(_RAISE)` and ZMK `&tog 2` become `Tog(2)`.
@@ -87,7 +88,7 @@ pub enum Key {
     /// Sticky key / one-shot modifier.
     ///
     /// QMK `OSM(MOD_LSFT)` and ZMK `&sk LSHFT` become `Sk("LSHFT")`.
-    Sk(String),
+    Sk(Modifier),
     /// Sticky layer / one-shot layer.
     ///
     /// QMK `OSL(_FN)` and ZMK `&sl 1` become `Sl(1)`.
@@ -105,15 +106,15 @@ pub enum Key {
     /// Mouse movement direction, such as `MOVE_UP`.
     ///
     /// QMK `KC_MS_U` and ZMK `&mmv MOVE_UP` become `Mmv("MOVE_UP")`.
-    Mmv(String),
+    Mmv(MouseMovement),
     /// Mouse button press, such as `LCLK`.
     ///
     /// QMK `KC_BTN1` and ZMK `&mkp LCLK` become `Mkp("LCLK")`.
-    Mkp(String),
+    Mkp(MouseButton),
     /// Mouse scroll direction, such as `SCRL_UP`.
     ///
     /// QMK `KC_WH_U` and ZMK `&msc SCRL_UP` become `Msc("SCRL_UP")`.
-    Msc(String),
+    Msc(MouseScroll),
     /// Transparent binding that falls through to a lower active layer.
     ///
     /// QMK `KC_TRNS`, QMK `_______`, and ZMK `&trans` become `Trans`.
@@ -138,7 +139,7 @@ pub enum Key {
     ///
     /// QMK `RGB_MODE_FORWARD` and ZMK `&rgb_ug RGB_EFF` become
     /// `RgbUg("RGB_EFF")`.
-    RgbUg(String),
+    RgbUg(RgbAction),
     /// Reference to a named macro in [`Keyboard::macros`].
     Macro(String),
     /// Reference to a tap-dance definition by index in [`Keyboard::tap_dances`].
@@ -175,7 +176,7 @@ pub struct MacroDef {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MacroStep {
     /// Tap a normalized ZMK key name, such as `A` or `RET`.
-    Tap(String),
+    Tap(KeyExpr),
     /// Wait for the given number of milliseconds.
     Wait(u32),
 }

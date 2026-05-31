@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::codes;
+use crate::codes::{self, KeyExpr, ModPrefix, Modifier, MouseButton, MouseMovement, MouseScroll};
 use crate::error::ParseCError;
 use crate::ir::{Key, Keyboard, Layer, TapDanceDef, TriLayer};
 
@@ -435,16 +435,16 @@ fn atom_to_key(
         return Key::Macro(name.to_string());
     }
 
-    if let Some(action) = codes::qmk_rgb_to_zmk(name) {
-        return Key::RgbUg(action.to_string());
+    if let Some(action) = codes::RgbAction::from_qmk(name) {
+        return Key::RgbUg(action);
     }
 
     if let Some(k) = qmk_mouse_to_zmk_key(name) {
         return k;
     }
 
-    if let Some(zmk) = codes::qmk_key_to_zmk(name) {
-        return Key::Kp(zmk.to_string());
+    if let Some(key) = KeyExpr::from_qmk_key(name) {
+        return Key::Kp(key);
     }
 
     Key::Unknown(name.to_string())
@@ -466,10 +466,9 @@ fn func_to_key(
         "MT" if args.len() == 2 => {
             let mod_str = args[0].as_atom().unwrap_or("").trim();
             let key_str = args[1].as_atom().unwrap_or("").trim();
-            let zmk_mod = codes::qmk_mod_to_zmk(mod_str).to_string();
-            let zmk_key = codes::qmk_key_to_zmk(key_str)
-                .unwrap_or(key_str)
-                .to_string();
+            let zmk_mod = Modifier::from_qmk(mod_str).unwrap_or(Modifier::LCtrl);
+            let zmk_key =
+                KeyExpr::from_qmk_key(key_str).unwrap_or_else(|| KeyExpr::Raw(key_str.to_string()));
             Key::Mt(zmk_mod, zmk_key)
         }
         "MO" if args.len() == 1 => {
@@ -489,9 +488,8 @@ fn func_to_key(
         "LT" if args.len() == 2 => {
             let layer = args[0].as_atom().unwrap_or("").trim();
             let key_str = args[1].as_atom().unwrap_or("").trim();
-            let zmk_key = codes::qmk_key_to_zmk(key_str)
-                .unwrap_or(key_str)
-                .to_string();
+            let zmk_key =
+                KeyExpr::from_qmk_key(key_str).unwrap_or_else(|| KeyExpr::Raw(key_str.to_string()));
             match resolve_layer(layer, layer_map) {
                 Some(idx) => Key::Lt(idx, zmk_key),
                 None => Key::Unknown(format!("LT({layer}, {key_str})")),
@@ -499,7 +497,10 @@ fn func_to_key(
         }
         "OSM" if args.len() == 1 => {
             let mod_str = args[0].as_atom().unwrap_or("").trim();
-            Key::Sk(codes::qmk_mod_to_zmk(mod_str).to_string())
+            Modifier::from_qmk(mod_str).map_or_else(
+                || Key::Unknown(format!("OSM({mod_str})")),
+                Key::Sk,
+            )
         }
         "OSL" if args.len() == 1 => {
             let layer = args[0].as_atom().unwrap_or("").trim();
@@ -538,22 +539,35 @@ fn func_to_key(
         )),
         "HYPR" if args.len() == 1 => {
             let inner = build_zmk_key_expr(&args[0]);
-            Key::Kp(format!("LG(LA(LS(LC({inner}))))"))
+            Key::Kp(wrap_mod_prefixes(
+                inner,
+                &[ModPrefix::LC, ModPrefix::LS, ModPrefix::LA, ModPrefix::LG],
+            ))
         }
         "MEH" if args.len() == 1 => {
             let inner = build_zmk_key_expr(&args[0]);
-            Key::Kp(format!("LA(LS(LC({inner})))"))
+            Key::Kp(wrap_mod_prefixes(
+                inner,
+                &[ModPrefix::LC, ModPrefix::LS, ModPrefix::LA],
+            ))
         }
         // Modifier-wrapping functions: LGUI(x), LSFT(x), etc.
         mod_fn if args.len() == 1 => {
-            let Some(prefix) = codes::qmk_mod_fn_to_zmk(mod_fn) else {
+            let Some(prefix) = ModPrefix::from_qmk_fn(mod_fn) else {
                 return unknown_call_key(name, args);
             };
             let inner = build_zmk_key_expr(&args[0]);
-            Key::Kp(format!("{prefix}({inner})"))
+            Key::Kp(KeyExpr::Modified(prefix, Box::new(inner)))
         }
         unsupported => unknown_call_key(unsupported, args),
     }
+}
+
+fn wrap_mod_prefixes(mut expr: KeyExpr, prefixes: &[ModPrefix]) -> KeyExpr {
+    for prefix in prefixes {
+        expr = KeyExpr::Modified(*prefix, Box::new(expr));
+    }
+    expr
 }
 
 fn unknown_call_key(name: &str, args: &[Expr]) -> Key {
@@ -568,42 +582,29 @@ fn unknown_call_key(name: &str, args: &[Expr]) -> Key {
 }
 
 fn qmk_mouse_to_zmk_key(name: &str) -> Option<Key> {
-    let key = name.strip_prefix("KC_").unwrap_or(name);
-    Some(match key {
-        "MS_U" | "MS_UP" => Key::Mmv("MOVE_UP".into()),
-        "MS_D" | "MS_DOWN" => Key::Mmv("MOVE_DOWN".into()),
-        "MS_L" | "MS_LEFT" => Key::Mmv("MOVE_LEFT".into()),
-        "MS_R" | "MS_RIGHT" => Key::Mmv("MOVE_RIGHT".into()),
-        "BTN1" => Key::Mkp("LCLK".into()),
-        "BTN2" => Key::Mkp("RCLK".into()),
-        "BTN3" => Key::Mkp("MCLK".into()),
-        "BTN4" => Key::Mkp("BTN4".into()),
-        "BTN5" => Key::Mkp("BTN5".into()),
-        "WH_U" | "MS_WH_UP" => Key::Msc("SCRL_UP".into()),
-        "WH_D" | "MS_WH_DOWN" => Key::Msc("SCRL_DOWN".into()),
-        "WH_L" | "MS_WH_LEFT" => Key::Msc("SCRL_LEFT".into()),
-        "WH_R" | "MS_WH_RIGHT" => Key::Msc("SCRL_RIGHT".into()),
-        unsupported => {
-            let _ = unsupported.len();
-            return None;
-        }
-    })
+    if let Some(movement) = MouseMovement::from_qmk(name) {
+        return Some(Key::Mmv(movement));
+    }
+    if let Some(button) = MouseButton::from_qmk(name) {
+        return Some(Key::Mkp(button));
+    }
+    MouseScroll::from_qmk(name).map(Key::Msc)
 }
 
-/// Recursively build a ZMK key expression string for nested mod wrappers.
-/// E.g. `LGUI(LSFT(KC_LBRC))` → "LG(LS(LBKT))"
-fn build_zmk_key_expr(expr: &Expr) -> String {
+/// Recursively build a typed key expression for nested mod wrappers.
+/// E.g. `LGUI(LSFT(KC_LBRC))` becomes `LG(LS(LBKT))` when rendered.
+fn build_zmk_key_expr(expr: &Expr) -> KeyExpr {
     match expr {
-        Expr::Atom(name) => codes::qmk_key_to_zmk(name.trim())
-            .unwrap_or(name.trim())
-            .to_string(),
-        Expr::Call { name, args } if args.len() == 1 => {
-            if let Some(prefix) = codes::qmk_mod_fn_to_zmk(name) {
-                return format!("{}({})", prefix, build_zmk_key_expr(&args[0]));
-            }
-            format!("{name}_UNKNOWN")
+        Expr::Atom(name) => {
+            KeyExpr::from_qmk_key(name.trim()).unwrap_or_else(|| KeyExpr::Raw(name.trim().to_string()))
         }
-        Expr::Call { name, .. } => format!("{name}_UNKNOWN"),
+        Expr::Call { name, args } if args.len() == 1 => {
+            if let Some(prefix) = ModPrefix::from_qmk_fn(name) {
+                return KeyExpr::Modified(prefix, Box::new(build_zmk_key_expr(&args[0])));
+            }
+            KeyExpr::Raw(format!("{name}_UNKNOWN"))
+        }
+        Expr::Call { name, .. } => KeyExpr::Raw(format!("{name}_UNKNOWN")),
     }
 }
 

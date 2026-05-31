@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::codes::{KeyExpr, Modifier, MouseButton, MouseMovement, MouseScroll, RgbAction};
 use crate::error::ParseZmkError;
 use crate::ir::{Key, Keyboard, Layer, MacroDef, MacroStep, TapDanceDef, TriLayer};
 
@@ -195,7 +196,7 @@ fn parse_macro_steps(s: &str) -> Vec<MacroStep> {
         match tokens.next() {
             Some("kp") => {
                 if let Some(k) = tokens.next() {
-                    steps.push(MacroStep::Tap(k.to_string()));
+                    steps.push(MacroStep::Tap(KeyExpr::parse_zmk(k)));
                 }
             }
             Some("macro_wait_time") => {
@@ -299,7 +300,7 @@ fn binding_to_key(
     match tokens[0] {
         "kp" => tokens
             .get(1)
-            .map_or(Key::Unknown("kp".into()), |k| Key::Kp((*k).to_string())),
+            .map_or(Key::Unknown("kp".into()), |k| Key::Kp(KeyExpr::parse_zmk(k))),
         "mo" => tokens
             .get(1)
             .and_then(|n| n.parse().ok())
@@ -308,7 +309,7 @@ fn binding_to_key(
             if let (Some(&n_str), Some(&k)) = (tokens.get(1), tokens.get(2)) {
                 n_str.parse::<usize>().map_or_else(
                     |_| Key::Unknown(tokens.join(" ")),
-                    |n| Key::Lt(n, k.to_string()),
+                    |n| Key::Lt(n, KeyExpr::parse_zmk(k)),
                 )
             } else {
                 Key::Unknown(tokens.join(" "))
@@ -316,7 +317,10 @@ fn binding_to_key(
         }
         "mt" => {
             if let (Some(&m), Some(&k)) = (tokens.get(1), tokens.get(2)) {
-                Key::Mt(m.to_string(), k.to_string())
+                match Modifier::from_zmk(m) {
+                    Some(modifier) => Key::Mt(modifier, KeyExpr::parse_zmk(k)),
+                    None => Key::Unknown(tokens.join(" ")),
+                }
             } else {
                 Key::Unknown(tokens.join(" "))
             }
@@ -327,7 +331,8 @@ fn binding_to_key(
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Tog),
         "sk" => tokens
             .get(1)
-            .map_or(Key::Unknown("sk".into()), |m| Key::Sk((*m).to_string())),
+            .and_then(|m| Modifier::from_zmk(m))
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Sk),
         "sl" => tokens
             .get(1)
             .and_then(|n| n.parse().ok())
@@ -338,22 +343,26 @@ fn binding_to_key(
             .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Df),
         "mmv" => tokens
             .get(1)
-            .map_or(Key::Unknown("mmv".into()), |d| Key::Mmv((*d).to_string())),
+            .and_then(|d| MouseMovement::from_zmk(d))
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Mmv),
         "mkp" => tokens
             .get(1)
-            .map_or(Key::Unknown("mkp".into()), |b| Key::Mkp((*b).to_string())),
+            .and_then(|b| MouseButton::from_zmk(b))
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Mkp),
         "msc" => tokens
             .get(1)
-            .map_or(Key::Unknown("msc".into()), |d| Key::Msc((*d).to_string())),
+            .and_then(|d| MouseScroll::from_zmk(d))
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::Msc),
         "bt" | "out" => Key::Unknown(format!("&{}", tokens.join(" "))),
         "trans" => Key::Trans,
         "none" => Key::None,
         "caps_word" => Key::CapsWord,
         "bootloader" => Key::Bootloader,
         "sys_reset" => Key::SysReset,
-        "rgb_ug" => tokens.get(1).map_or(Key::Unknown("rgb_ug".into()), |a| {
-            Key::RgbUg((*a).to_string())
-        }),
+        "rgb_ug" => tokens
+            .get(1)
+            .and_then(|a| RgbAction::from_zmk(a))
+            .map_or_else(|| Key::Unknown(tokens.join(" ")), Key::RgbUg),
         name if tap_dance_labels.contains_key(name) => Key::TapDance(tap_dance_labels[name]),
         name if macro_names.contains(name) => Key::Macro(name.to_string()),
         unsupported => {
