@@ -68,6 +68,13 @@ struct Cli {
     /// Parse the keymap and print a layout table, then exit without converting
     #[arg(short = 'p', long)]
     print_layout: bool,
+
+    /// Shield name used to emit a companion `<shield>.conf` file.
+    ///
+    /// When set, a `<shield>.conf` file with detected `CONFIG_*` flags (RGB,
+    /// pointing, encoder) is written alongside the `.keymap` output.
+    #[arg(long)]
+    shield: Option<String>,
 }
 
 /// Process exit boundary for the binary.
@@ -119,7 +126,22 @@ fn run() -> Result<(), Error> {
     }
 
     let output = zmk::render(&keyboard, cols);
-    io::write_output(&output, cli.output.as_deref())
+    io::write_output(&output, cli.output.as_deref())?;
+
+    if let Some(shield) = &cli.shield {
+        let conf = zmk::render_conf(&keyboard);
+        let conf_path = cli
+            .output
+            .as_deref()
+            .and_then(|p| p.parent())
+            .map_or_else(
+                || PathBuf::from(format!("{shield}.conf")),
+                |dir| dir.join(format!("{shield}.conf")),
+            );
+        io::write_output(&conf, Some(&conf_path))?;
+    }
+
+    Ok(())
 }
 
 /// Print the built-in keyboard column heuristics used by `--keyboard`.

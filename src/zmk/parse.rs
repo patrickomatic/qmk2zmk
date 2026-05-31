@@ -242,6 +242,7 @@ fn extract_layers(
             macro_names,
             tap_dance_labels,
         );
+        let sensor_bindings = parse_sensor_bindings(block);
         let idx = layers.len();
         layers.push(Layer {
             name: if name.is_empty() {
@@ -251,9 +252,52 @@ fn extract_layers(
             },
             index: idx,
             keys,
+            sensor_bindings,
         });
     }
     Ok(layers)
+}
+
+/// Parse `sensor-bindings = <&inc_dec_kp CW CCW>, …;` from a layer block.
+///
+/// Each `&inc_dec_kp A B` entry produces one `(A, B)` pair. Unrecognised
+/// behavior names are silently skipped.
+fn parse_sensor_bindings(block: &str) -> Vec<(KeyExpr, KeyExpr)> {
+    let Some(start) = block.find("sensor-bindings") else {
+        return vec![];
+    };
+    let after = &block[start + "sensor-bindings".len()..];
+    let Some(eq) = after.find('=') else {
+        return vec![];
+    };
+    let rhs = after[eq + 1..].trim_start();
+    let Some(semi) = rhs.find(';') else {
+        return vec![];
+    };
+    let rhs = &rhs[..semi];
+
+    let mut result = Vec::new();
+    for entry in rhs.split(',') {
+        let entry = entry.trim().trim_start_matches('<').trim_end_matches('>').trim();
+        // Expect "&inc_dec_kp CW CCW"
+        let entry = entry.strip_prefix('&').unwrap_or(entry);
+        let mut parts = entry.split_whitespace();
+        let behavior = parts.next().unwrap_or("");
+        if behavior != "inc_dec_kp" {
+            continue;
+        }
+        let clockwise = parts.next().unwrap_or("");
+        let counter = parts.next().unwrap_or("");
+        if clockwise.is_empty() || counter.is_empty() {
+            continue;
+        }
+        let cw = KeyExpr::from_zmk_key(clockwise)
+            .unwrap_or_else(|| KeyExpr::Raw(clockwise.to_string()));
+        let ccw = KeyExpr::from_zmk_key(counter)
+            .unwrap_or_else(|| KeyExpr::Raw(counter.to_string()));
+        result.push((cw, ccw));
+    }
+    result
 }
 
 /// Return the first DTS `bindings = <...>` list inside a block.
@@ -690,5 +734,53 @@ mod tests {
         assert!(matches!(&km.layers[0].keys[0], Key::TapDance(0)));
         assert!(matches!(&km.layers[0].keys[1], Key::TapDance(1)));
         assert_eq!(km.tap_dances[1].bindings.len(), 3);
+    }
+
+    #[test]
+    fn parses_sensor_bindings() {
+        let src = r#"/ {
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <&kp A>;
+            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
+        };
+        lower_layer {
+            bindings = <&trans>;
+            sensor-bindings = <&inc_dec_kp PG_DN PG_UP>;
+        };
+    };
+};"#;
+        let km = parse(src).unwrap();
+        assert_eq!(km.layers.len(), 2);
+
+        let base = &km.layers[0];
+        assert_eq!(base.sensor_bindings.len(), 1);
+        let (cw, ccw) = &base.sensor_bindings[0];
+        assert_eq!(cw.to_string(), "C_VOL_UP");
+        assert_eq!(ccw.to_string(), "C_VOL_DN");
+
+        let lower = &km.layers[1];
+        assert_eq!(lower.sensor_bindings.len(), 1);
+        assert_eq!(lower.sensor_bindings[0].0.to_string(), "PG_DN");
+        assert_eq!(lower.sensor_bindings[0].1.to_string(), "PG_UP");
+    }
+
+    #[test]
+    fn sensor_bindings_round_trip() {
+        let src = r#"/ {
+    keymap {
+        compatible = "zmk,keymap";
+        base_layer {
+            bindings = <&kp A &kp B &kp C &kp D &kp E &kp F>;
+            sensor-bindings = <&inc_dec_kp C_VOL_UP C_VOL_DN>;
+        };
+    };
+};"#;
+        let km = crate::zmk::parse::parse(src).unwrap();
+        let pass1 = crate::zmk::render(&km, Some(6));
+        let km2 = crate::zmk::parse::parse(&pass1).unwrap();
+        let pass2 = crate::zmk::render(&km2, Some(6));
+        assert_eq!(pass1, pass2, "sensor-bindings must survive ZMK render round-trip");
     }
 }

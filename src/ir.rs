@@ -45,6 +45,12 @@ pub struct Layer {
     pub index: usize,
     /// Keys in physical layout order, already flattened out of source syntax.
     pub keys: Vec<Key>,
+    /// Per-encoder clockwise/counter-clockwise key pairs for this layer.
+    ///
+    /// Each element maps to one physical encoder. QMK's `encoder_update_user`
+    /// callback is the source for this data; ZMK renders each pair as
+    /// `sensor-bindings = <&inc_dec_kp CW CCW>`.
+    pub sensor_bindings: Vec<(KeyExpr, KeyExpr)>,
 }
 
 /// A single binding in a layer, macro, or tap-dance definition.

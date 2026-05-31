@@ -43,6 +43,9 @@ pub fn parse(source: &str) -> Result<Keyboard, ParseCError> {
         .map(|(i, td)| (td.name.clone(), i))
         .collect();
 
+    let encoder_bindings =
+        extract_encoder_bindings(&cleaned, &layer_map, &defines, &custom_keycodes);
+
     let raw_layers = extract_raw_layers(&cleaned)?;
 
     let mut layers: Vec<Layer> = raw_layers
@@ -61,7 +64,15 @@ pub fn parse(source: &str) -> Result<Keyboard, ParseCError> {
                     )
                 })
                 .collect();
-            Layer { name, index, keys }
+            let sensor_bindings = encoder_bindings
+                .get(&index)
+                .map_or_else(Vec::new, |pair| vec![pair.clone()]);
+            Layer {
+                name,
+                index,
+                keys,
+                sensor_bindings,
+            }
         })
         .collect();
 
@@ -711,6 +722,200 @@ fn parse_tap_dance_action(
     vec![]
 }
 
+// ── Encoder extraction ────────────────────────────────────────────────────────
+
+/// Parse `encoder_update_user` and return a map from layer index to
+/// (clockwise key, counter-clockwise key).
+///
+/// Handles two common QMK patterns:
+///
+/// 1. **Per-layer switch**: `switch (get_highest_layer(layer_state)) { case _BASE: … }`
+/// 2. **Global**: a bare `if (clockwise) { tap_code(CW); } else { tap_code(CCW); }`
+///    at the function's top level, applied to every layer in `layer_map`.
+fn extract_encoder_bindings(
+    s: &str,
+    layer_map: &HashMap<String, usize>,
+    defines: &HashMap<String, String>,
+    custom_keycodes: &HashSet<String>,
+) -> HashMap<usize, (KeyExpr, KeyExpr)> {
+    let mut result = HashMap::new();
+
+    let Some(body) = find_function_body(s, "encoder_update_user") else {
+        return result;
+    };
+
+    if body.contains("get_highest_layer")
+        && let Some(switch_body) = extract_switch_on_highest_layer(&body)
+    {
+        parse_switch_cases(&switch_body, layer_map, defines, custom_keycodes, &mut result);
+    }
+
+    if result.is_empty()
+        && let Some(pair) = extract_clockwise_pair(&body, defines, custom_keycodes)
+    {
+        for &idx in layer_map.values() {
+            result.insert(idx, pair.clone());
+        }
+    }
+
+    result
+}
+
+/// Extract the body (between the outer braces) of a named C function.
+fn find_function_body(s: &str, fn_name: &str) -> Option<String> {
+    let pos = s.find(fn_name)?;
+    let after = &s[pos + fn_name.len()..];
+    let paren = after.find('(')?;
+    let close_paren = find_matching(&after[paren..], '(', ')')?;
+    let after_params = after[paren + close_paren + 1..].trim_start();
+    let brace = after_params.find('{')?;
+    let body_rest = &after_params[brace..];
+    let close_brace = find_matching(body_rest, '{', '}')?;
+    Some(body_rest[1..close_brace].to_string())
+}
+
+/// Extract the body of `switch (get_highest_layer(...)) { … }`.
+fn extract_switch_on_highest_layer(body: &str) -> Option<String> {
+    let switch_pos = body.find("switch")?;
+    let after = &body[switch_pos..];
+    let paren = after.find('(')?;
+    let close_paren = find_matching(&after[paren..], '(', ')')?;
+    if !after[paren + 1..paren + close_paren].contains("get_highest_layer") {
+        return None;
+    }
+    let after_cond = after[paren + close_paren + 1..].trim_start();
+    let brace = after_cond.find('{')?;
+    let close = find_matching(&after_cond[brace..], '{', '}')?;
+    Some(after_cond[brace + 1..brace + close].to_string())
+}
+
+/// Walk the cases of a switch body and populate `result` with per-layer bindings.
+fn parse_switch_cases(
+    switch_body: &str,
+    layer_map: &HashMap<String, usize>,
+    defines: &HashMap<String, String>,
+    custom_keycodes: &HashSet<String>,
+    result: &mut HashMap<usize, (KeyExpr, KeyExpr)>,
+) {
+    let mut remaining = switch_body;
+    while let Some(case_pos) = remaining.find("case ") {
+        let after_case = &remaining[case_pos + 5..];
+        let Some(colon) = after_case.find(':') else {
+            break;
+        };
+        let layer_name = after_case[..colon].trim();
+        let case_start = case_pos + 5 + colon + 1;
+        let case_body = &remaining[case_start..];
+        let end = find_case_body_end(case_body);
+        if let Some(idx) = resolve_layer(layer_name, layer_map)
+            && let Some(pair) =
+                extract_clockwise_pair(&case_body[..end], defines, custom_keycodes)
+        {
+            result.insert(idx, pair);
+        }
+        remaining = &remaining[case_start + end..];
+    }
+}
+
+/// Return the length of the current case's body — stopping at the next `case`,
+/// `default:`, or the end of the enclosing switch block.
+fn find_case_body_end(s: &str) -> usize {
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < s.len() {
+        match s.as_bytes()[i] {
+            b'{' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' => {
+                if depth == 0 {
+                    return i;
+                }
+                depth -= 1;
+                i += 1;
+            }
+            _ => {
+                if depth == 0
+                    && (s[i..].starts_with("case ") || s[i..].starts_with("default:"))
+                {
+                    return i;
+                }
+                i += 1;
+            }
+        }
+    }
+    s.len()
+}
+
+/// Extract a (clockwise, counter-clockwise) key pair from an `if (clockwise)`
+/// block.  Returns `None` if the pattern is not found or not recognized.
+fn extract_clockwise_pair(
+    body: &str,
+    defines: &HashMap<String, String>,
+    custom_keycodes: &HashSet<String>,
+) -> Option<(KeyExpr, KeyExpr)> {
+    // Allow both "if (clockwise)" and "if(clockwise)" spellings.
+    let if_pos = body.find("if")?;
+    let after_if = body[if_pos + 2..].trim_start();
+    if !after_if.starts_with('(') {
+        return None;
+    }
+    let close_paren = find_matching(after_if, '(', ')')?;
+    if !after_if[1..close_paren].contains("clockwise") {
+        return None;
+    }
+    let after_cond = after_if[close_paren + 1..].trim_start();
+    let (clockwise_body, rest) = extract_block_or_stmt(after_cond)?;
+    let after_else_kw = rest.trim_start();
+    let after_else = after_else_kw.strip_prefix("else")?.trim_start();
+    let (counter_body, _) = extract_block_or_stmt(after_else)?;
+    let cw = extract_tap_code_key(&clockwise_body, defines, custom_keycodes)?;
+    let ccw = extract_tap_code_key(&counter_body, defines, custom_keycodes)?;
+    Some((cw, ccw))
+}
+
+/// Return the body of a `{ … }` block or single statement, and the remaining
+/// text after the closing delimiter.
+fn extract_block_or_stmt(s: &str) -> Option<(String, &str)> {
+    if s.starts_with('{') {
+        let close = find_matching(s, '{', '}')?;
+        Some((s[1..close].to_string(), &s[close + 1..]))
+    } else {
+        let end = s.find(';')? + 1;
+        Some((s[..end - 1].to_string(), &s[end..]))
+    }
+}
+
+/// Extract the ZMK key expression from a `tap_code(KC_X)` or
+/// `tap_code16(KC_X)` or `register_code(KC_X)` call.
+fn extract_tap_code_key(
+    body: &str,
+    defines: &HashMap<String, String>,
+    custom_keycodes: &HashSet<String>,
+) -> Option<KeyExpr> {
+    for fn_name in &["tap_code16", "tap_code", "register_code"] {
+        if let Some(pos) = body.find(fn_name) {
+            let after = body[pos + fn_name.len()..].trim_start();
+            if !after.starts_with('(') {
+                continue;
+            }
+            let close = find_matching(after, '(', ')')?;
+            let arg = after[1..close].trim();
+            let empty_lm: HashMap<String, usize> = HashMap::new();
+            let empty_td: HashMap<String, usize> = HashMap::new();
+            let key =
+                parse_key_expr_str(arg, &empty_lm, defines, custom_keycodes, &empty_td);
+            if let Key::Kp(expr) = key {
+                return Some(expr);
+            }
+            // Fallback: try direct QMK→ZMK lookup without the full key pipeline
+            return KeyExpr::from_qmk_key(arg);
+        }
+    }
+    None
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 /// Find the index of the closing delimiter matching the opening at position 0.
@@ -1192,5 +1397,87 @@ uint8_t layer_state_set_user(uint8_t state) {
         assert_eq!(tri.lower, 1);
         assert_eq!(tri.upper, 2);
         assert_eq!(tri.tri, 3);
+    }
+
+    // ── encoder_update_user parsing ───────────────────────────────────────────
+
+    #[test]
+    fn encoder_global_pattern() {
+        let src = r"
+enum layers { _BASE, _FN };
+const uint16_t PROGMEM keymaps[][1][2] = {
+    [_BASE] = LAYOUT(KC_A, KC_B),
+    [_FN]   = LAYOUT(KC_TRANSPARENT, KC_TRANSPARENT),
+};
+bool encoder_update_user(uint8_t index, bool clockwise) {
+    if (clockwise) {
+        tap_code(KC_VOLU);
+    } else {
+        tap_code(KC_VOLD);
+    }
+    return false;
+}
+";
+        let km = super::parse(src).unwrap();
+        assert_eq!(km.layers.len(), 2);
+        for layer in &km.layers {
+            assert_eq!(layer.sensor_bindings.len(), 1, "layer {} should have one encoder pair", layer.name);
+            let (cw, ccw) = &layer.sensor_bindings[0];
+            assert_eq!(cw.to_string(), "C_VOL_UP");
+            assert_eq!(ccw.to_string(), "C_VOL_DN");
+        }
+    }
+
+    #[test]
+    fn encoder_per_layer_switch() {
+        let src = r"
+enum layers { _BASE, _LOWER };
+const uint16_t PROGMEM keymaps[][1][2] = {
+    [_BASE]  = LAYOUT(KC_A, KC_B),
+    [_LOWER] = LAYOUT(KC_TRANSPARENT, KC_TRANSPARENT),
+};
+bool encoder_update_user(uint8_t index, bool clockwise) {
+    switch (get_highest_layer(layer_state)) {
+        case _BASE:
+            if (clockwise) {
+                tap_code(KC_VOLU);
+            } else {
+                tap_code(KC_VOLD);
+            }
+            break;
+        case _LOWER:
+            if (clockwise) {
+                tap_code(KC_PGDN);
+            } else {
+                tap_code(KC_PGUP);
+            }
+            break;
+    }
+    return false;
+}
+";
+        let km = super::parse(src).unwrap();
+        let base = km.layers.iter().find(|l| l.name == "_BASE").unwrap();
+        assert_eq!(base.sensor_bindings.len(), 1);
+        let (cw, ccw) = &base.sensor_bindings[0];
+        assert_eq!(cw.to_string(), "C_VOL_UP");
+        assert_eq!(ccw.to_string(), "C_VOL_DN");
+
+        let lower = km.layers.iter().find(|l| l.name == "_LOWER").unwrap();
+        assert_eq!(lower.sensor_bindings.len(), 1);
+        assert_eq!(lower.sensor_bindings[0].0.to_string(), "PG_DN");
+        assert_eq!(lower.sensor_bindings[0].1.to_string(), "PG_UP");
+    }
+
+    #[test]
+    fn no_encoder_means_empty_sensor_bindings() {
+        let src = r"
+enum layers { _BASE };
+const uint16_t PROGMEM keymaps[][1][1] = {
+    [_BASE] = LAYOUT(KC_A),
+};
+";
+        let km = super::parse(src).unwrap();
+        assert!(km.layers[0].sensor_bindings.is_empty());
     }
 }

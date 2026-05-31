@@ -83,6 +83,7 @@ impl From<QmkJsonLayer> for Layer {
                     )
                 })
                 .collect(),
+            sensor_bindings: vec![],
         }
     }
 }

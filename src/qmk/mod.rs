@@ -234,6 +234,7 @@ mod tests {
                 name: "base_layer".into(),
                 index: 0,
                 keys,
+                sensor_bindings: vec![],
             }],
             macros: vec![],
             tap_dances: vec![],
