@@ -46,6 +46,7 @@ Options:
       --cols <COLS>          Override columns per row in ZMK output
       --list-keyboards       List known keyboards and their column counts, then exit
       --no-warn              Suppress warnings for unmapped keycodes
+  -p, --print-layout         Parse the keymap and print a layout table, then exit
   -h, --help                 Print help
 ```
 
@@ -68,6 +69,9 @@ qmk2zmk keymap.c --cols 10
 # List known keyboards
 qmk2zmk --list-keyboards
 
+# Print a human-readable layout table without converting
+qmk2zmk keymap.c --print-layout
+
 # Explicit format flag
 qmk2zmk -f json keymap.json -o my_keymap.keymap
 ```
@@ -88,6 +92,7 @@ Options:
       --cols <COLS>          Override columns per row in QMK C output
       --list-keyboards       List known keyboards and their column counts, then exit
       --no-warn              Suppress warnings for unmapped keycodes
+  -p, --print-layout         Parse the keymap and print a layout table, then exit
   -h, --help                 Print help
 ```
 
@@ -106,6 +111,9 @@ zmk2qmk my_keymap.keymap -f c --keyboard corne
 
 # List known keyboards
 zmk2qmk --list-keyboards
+
+# Print a human-readable layout table without converting
+zmk2qmk my_keymap.keymap --print-layout
 ```
 
 ## What gets converted

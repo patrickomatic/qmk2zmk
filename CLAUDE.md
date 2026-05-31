@@ -44,7 +44,10 @@ examples/
 
 All code must pass `cargo clippy --all-targets -- -W clippy::pedantic -D warnings` with no errors. This is enforced by CI. Run it locally before committing.
 
-The one deliberate exception is `#[allow(clippy::implicit_hasher)]` on `parse_key_expr_str` — threading separate hasher type parameters through all private helpers adds noise without value for a CLI tool.
+Deliberate exceptions:
+
+- `#[allow(clippy::implicit_hasher)]` on `parse_key_expr_str` — threading separate hasher type parameters through all private helpers adds noise without value for a CLI tool.
+- `#[allow(clippy::cmp_owned)]` on `KeyExpr`'s `PartialEq<&str>` / `PartialEq<str>` impls — the `Modified` variant (nested modifier expressions like `LG(LS(LBKT))`) must build a formatted string to compare; there is no allocation-free alternative.
 
 ## Testing
 
@@ -76,6 +79,18 @@ all of these are done and verified:
    `cargo search qmk2zmk --limit 5` or `cargo info qmk2zmk`.
 9. Report the pushed commit, pushed tag, GitHub Release workflow status, and
    crates.io version.
+
+## Trait conventions for domain types
+
+The typed domain types in `src/codes.rs` (`KeyCode`, `Modifier`, `KeyExpr`, `RgbAction`, `MouseMovement`, `MouseButton`, `MouseScroll`, `ModPrefix`) follow a consistent pattern:
+
+- **`Display`** outputs the **ZMK** spelling. This is the canonical string form; use `.to_string()` or format interpolation `{x}` wherever a ZMK string is needed.
+- **`qmk_name()` / `qmk_mod_name()`** methods return the **QMK** spelling as `&str`. Call these directly in QMK renderers; do not add a trait wrapper.
+  - `Modifier` exposes three QMK spellings: `qmk_mod_name()` (`MOD_LSFT`, used in `MT`/`OSM`), `qmk_fn_name()` (`LSFT`, used in modifier-wrapping functions), and `zmk_name()` via `Display`.
+  - `KeyExpr` has a `to_qmk() -> String` method for the recursive modifier-expression case (e.g. `LGUI(LSFT(KC_LBRC))`).
+- **`From<&str>` / `From<String>`** are implemented for types with an `Unknown` fallback variant. They try ZMK spelling first, then QMK, then fall back to `Unknown(raw)`. Use these when the source format is ambiguous or mixed.
+- **`from_qmk(s)` / `from_zmk(s)`** associated functions return `Option<Self>` for strict format-specific parsing (no `Unknown` fallback). Prefer these in parsers where the input format is known.
+- There are **no custom `ToZmk` or `ToQmk` traits**. Earlier versions had them; they were removed because `Display` already covers the ZMK case and the QMK case has no stdlib equivalent. Don't reintroduce them.
 
 ## Key mapping conventions
 
