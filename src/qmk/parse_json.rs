@@ -112,4 +112,32 @@ mod tests {
         assert!(matches!(&keyboard.layers[1].keys[0], Key::Trans));
         assert!(matches!(&keyboard.layers[1].keys[1], Key::None));
     }
+
+    #[test]
+    fn invalid_json_returns_error() {
+        assert!(parse("not json at all").is_err());
+    }
+
+    #[test]
+    fn missing_layers_field_returns_error() {
+        assert!(parse(r#"{"keyboard": "planck"}"#).is_err());
+    }
+
+    #[test]
+    fn empty_layers_array_produces_empty_keyboard() {
+        let source = r#"{"layers": []}"#;
+        let keyboard = parse(source).unwrap();
+        assert!(keyboard.layers.is_empty());
+        assert!(keyboard.keyboard.is_none());
+        assert!(keyboard.layout.is_none());
+    }
+
+    #[test]
+    fn layer_names_synthesized_by_index() {
+        let source = r#"{"layers": [["KC_A"], ["KC_B"], ["KC_C"]]}"#;
+        let keyboard = parse(source).unwrap();
+        assert_eq!(keyboard.layers[0].name, "LAYER_0");
+        assert_eq!(keyboard.layers[1].name, "LAYER_1");
+        assert_eq!(keyboard.layers[2].name, "LAYER_2");
+    }
 }

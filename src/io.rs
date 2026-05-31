@@ -35,3 +35,47 @@ pub fn write_output(content: &str, path: Option<&Path>) -> Result<(), Error> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn read_input_reads_existing_file() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let content = read_input(&path).unwrap();
+        assert!(content.contains("[package]"));
+    }
+
+    #[test]
+    fn read_input_returns_read_file_error_for_missing_file() {
+        let path = PathBuf::from("/nonexistent/path/qmk2zmk_test.txt");
+        let err = read_input(&path).unwrap_err();
+        assert!(matches!(err, Error::ReadFile { .. }));
+        assert!(err.to_string().contains("nonexistent"));
+    }
+
+    #[test]
+    fn write_output_none_path_succeeds() {
+        assert!(write_output("hello", None).is_ok());
+    }
+
+    #[test]
+    fn write_output_to_file_round_trips_content() {
+        let path = std::env::temp_dir()
+            .join(format!("qmk2zmk_io_test_{}.txt", std::process::id()));
+        write_output("test content", Some(&path)).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(content, "test content");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn write_output_to_bad_path_returns_write_file_error() {
+        let path = PathBuf::from("/nonexistent/dir/file.txt");
+        let err = write_output("content", Some(&path)).unwrap_err();
+        assert!(matches!(err, Error::WriteFile { .. }));
+        assert!(err.to_string().contains("nonexistent"));
+    }
+}

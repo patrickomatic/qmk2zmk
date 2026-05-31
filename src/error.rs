@@ -168,3 +168,100 @@ impl fmt::Display for ParseZmkError {
 }
 
 impl std::error::Error for ParseZmkError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fake_io_err() -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "not found")
+    }
+
+    #[test]
+    fn error_read_file_display() {
+        let e = Error::ReadFile { path: "foo.txt".into(), source: fake_io_err() };
+        assert_eq!(e.to_string(), "cannot read 'foo.txt'");
+    }
+
+    #[test]
+    fn error_write_file_display() {
+        let e = Error::WriteFile { path: "bar.txt".into(), source: fake_io_err() };
+        assert_eq!(e.to_string(), "cannot write 'bar.txt'");
+    }
+
+    #[test]
+    fn error_parse_c_display() {
+        let e = Error::ParseC(ParseCError::NoKeymapsArray);
+        assert!(e.to_string().contains("QMK C keymap parse failed"));
+    }
+
+    #[test]
+    fn error_parse_json_display() {
+        let json_err = serde_json::from_str::<serde_json::Value>("not json").unwrap_err();
+        let e = Error::ParseJson(json_err);
+        assert!(e.to_string().contains("QMK JSON keymap parse failed"));
+    }
+
+    #[test]
+    fn error_parse_zmk_display() {
+        let e = Error::ParseZmk(ParseZmkError::NoKeymapBlock);
+        assert!(e.to_string().contains("ZMK keymap parse failed"));
+    }
+
+    #[test]
+    fn error_source_for_io_variants() {
+        use std::error::Error as StdError;
+        let e = Error::ReadFile { path: "x".into(), source: fake_io_err() };
+        assert!(e.source().is_some());
+        let e = Error::WriteFile { path: "x".into(), source: fake_io_err() };
+        assert!(e.source().is_some());
+    }
+
+    #[test]
+    fn error_source_for_parse_variants() {
+        use std::error::Error as StdError;
+        let e = Error::ParseC(ParseCError::NoKeymapsArray);
+        assert!(e.source().is_some());
+        let e = Error::ParseZmk(ParseZmkError::NoKeymapBlock);
+        assert!(e.source().is_some());
+    }
+
+    #[test]
+    fn from_parse_c_error() {
+        let e: Error = ParseCError::NoKeymapsBrace.into();
+        assert!(matches!(e, Error::ParseC(ParseCError::NoKeymapsBrace)));
+    }
+
+    #[test]
+    fn from_parse_zmk_error() {
+        let e: Error = ParseZmkError::NoKeymapBlock.into();
+        assert!(matches!(e, Error::ParseZmk(ParseZmkError::NoKeymapBlock)));
+    }
+
+    #[test]
+    fn parse_c_error_all_variants_display() {
+        let cases: &[(&str, ParseCError)] = &[
+            ("keymaps", ParseCError::NoKeymapsArray),
+            ("brace", ParseCError::NoKeymapsBrace),
+            ("brace", ParseCError::UnmatchedKeymapsBrace),
+            ("[", ParseCError::UnclosedLayerBracket),
+            ("L0", ParseCError::MissingEquals { layer: "L0".into() }),
+            ("L0", ParseCError::MissingLayoutParen { layer: "L0".into() }),
+            ("L0", ParseCError::UnmatchedLayoutParen { layer: "L0".into() }),
+        ];
+        for (substring, err) in cases {
+            assert!(
+                err.to_string().contains(substring),
+                "{err} should contain '{substring}'"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_zmk_error_all_variants_display() {
+        let e1 = ParseZmkError::NoKeymapBlock;
+        assert!(e1.to_string().contains("keymap"));
+        let e2 = ParseZmkError::UnclosedBlock { context: "layers".into() };
+        assert!(e2.to_string().contains("layers"));
+    }
+}

@@ -398,6 +398,58 @@ mod tests {
     }
 
     #[test]
+    fn c_cols_override_respected() {
+        let km = simple_keymap(vec![Key::Trans; 12]);
+        let out4 = render_c(&km, Some(4));
+        let out12 = render_c(&km, Some(12));
+        assert!(
+            out4.lines().count() > out12.lines().count(),
+            "4-col render should produce more lines than 12-col render"
+        );
+    }
+
+    #[test]
+    fn json_rgb_key_renders_qmk_name() {
+        let km = simple_keymap(vec![
+            Key::RgbUg("RGB_TOG".into()),
+            Key::RgbUg("RGB_EFF".into()),
+        ]);
+        let out = render_json(&km);
+        assert!(out.contains(r#""RGB_TOG""#));
+        assert!(out.contains(r#""RGB_MODE_FORWARD""#));
+    }
+
+    #[test]
+    fn c_macros_block_emitted() {
+        use crate::ir::MacroDef;
+        let mut km = simple_keymap(vec![Key::Macro("MY_MACRO".into())]);
+        km.macros = vec![MacroDef {
+            name: "MY_MACRO".into(),
+            steps: vec![],
+        }];
+        let out = render_c(&km, None);
+        assert!(out.contains("process_record_user"));
+        assert!(out.contains("MY_MACRO"));
+        assert!(out.contains("TODO: implement macro"));
+    }
+
+    #[test]
+    fn json_unknown_key_preserved_as_raw_string() {
+        let km = simple_keymap(vec![Key::Unknown("BT_SEL 0".into())]);
+        let out = render_json(&km);
+        assert!(out.contains("TODO: BT_SEL 0"));
+    }
+
+    #[test]
+    fn c_cols_inferred_from_key_count() {
+        // 48 keys → 12 cols; 30 keys → 10 cols; 24 keys → 12 cols
+        assert_eq!(infer_cols(48), 12);
+        assert_eq!(infer_cols(30), 10);
+        assert_eq!(infer_cols(24), 12);
+        assert_eq!(infer_cols(7), 12); // fallback
+    }
+
+    #[test]
     fn c_tap_dance_fn_advanced_stub_for_other_counts() {
         use crate::ir::TapDanceDef;
         let mut km = simple_keymap(vec![Key::TapDance(0)]);

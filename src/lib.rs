@@ -89,3 +89,104 @@ pub fn report_and_exit(e: &dyn std::error::Error) -> ! {
     }
     std::process::exit(1);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::{Keyboard, Layer};
+
+    fn kb_with_keys(keys: Vec<ir::Key>) -> Keyboard {
+        Keyboard {
+            keyboard: None,
+            layout: None,
+            layers: vec![Layer {
+                name: "base".into(),
+                index: 0,
+                keys,
+                sensor_bindings: vec![],
+            }],
+            macros: vec![],
+            tap_dances: vec![],
+            tri_layer: None,
+        }
+    }
+
+    fn layout_str(keys: Vec<ir::Key>) -> String {
+        let km = kb_with_keys(keys);
+        let mut buf = Vec::new();
+        print_layout_to(&km, None, &mut buf);
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn key_label_all_variants() {
+        let out = layout_str(vec![
+            ir::Key::Lt(1, "SPACE".into()),
+            ir::Key::Mt("LSHFT".into(), "Z".into()),
+            ir::Key::Tog(2),
+            ir::Key::Sk("LCTRL".into()),
+            ir::Key::Sl(3),
+            ir::Key::To(0),
+            ir::Key::Df(1),
+            ir::Key::Mmv("MOVE_UP".into()),
+            ir::Key::Mkp("LCLK".into()),
+            ir::Key::Msc("SCRL_UP".into()),
+            ir::Key::CapsWord,
+            ir::Key::Bootloader,
+            ir::Key::SysReset,
+            ir::Key::RgbUg("RGB_TOG".into()),
+            ir::Key::Macro("MY_MACRO".into()),
+            ir::Key::TapDance(0),
+            ir::Key::Unknown("WEIRD".into()),
+        ]);
+        assert!(out.contains("LT(1,SPACE)"));
+        assert!(out.contains("MT(LSHFT,Z)"));
+        assert!(out.contains("TG(2)"));
+        assert!(out.contains("SK(LCTRL)"));
+        assert!(out.contains("SL(3)"));
+        assert!(out.contains("TO(0)"));
+        assert!(out.contains("DF(1)"));
+        assert!(out.contains("MOVE_UP"));
+        assert!(out.contains("LCLK"));
+        assert!(out.contains("SCRL_UP"));
+        assert!(out.contains("CAPS_WORD"));
+        assert!(out.contains("BOOT"));
+        assert!(out.contains("RESET"));
+        assert!(out.contains("RGB_TOG"));
+        assert!(out.contains("M(MY_MACRO)"));
+        assert!(out.contains("TD(0)"));
+        assert!(out.contains("?(WEIRD)"));
+    }
+
+    #[test]
+    fn print_layout_to_defaults_to_10_cols_when_none() {
+        let keys = vec![ir::Key::Trans; 10];
+        let km = kb_with_keys(keys);
+        let mut buf = Vec::new();
+        print_layout_to(&km, None, &mut buf);
+        let out = String::from_utf8(buf).unwrap();
+        // 10 keys at 10 cols = 1 data row
+        assert_eq!(out.lines().filter(|l| l.starts_with("  ")).count(), 1);
+    }
+
+    #[test]
+    fn print_layout_to_empty_layer_emits_blank_line() {
+        let km = kb_with_keys(vec![]);
+        let mut buf = Vec::new();
+        print_layout_to(&km, None, &mut buf);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("Layer 0: base"));
+    }
+
+    #[test]
+    fn warn_unknowns_does_not_panic_with_no_unknowns() {
+        let km = kb_with_keys(vec![ir::Key::Kp("A".into()), ir::Key::Trans]);
+        warn_unknowns(&km);
+    }
+
+    #[test]
+    fn warn_unknowns_does_not_panic_with_unknowns() {
+        let km = kb_with_keys(vec![ir::Key::Unknown("WEIRD".into())]);
+        warn_unknowns(&km);
+    }
+}

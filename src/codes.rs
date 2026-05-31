@@ -1139,4 +1139,166 @@ mod tests {
     fn key_expr_unknown_falls_back_to_raw() {
         assert_eq!(KeyExpr::parse_zmk("WEIRD").to_qmk(), "WEIRD");
     }
+
+    #[test]
+    fn mouse_movement_parses_zmk_and_qmk() {
+        assert_eq!(MouseMovement::from_zmk("MOVE_UP"), Some(MouseMovement::Up));
+        assert_eq!(MouseMovement::from_zmk("MOVE_DOWN"), Some(MouseMovement::Down));
+        assert_eq!(MouseMovement::from_zmk("MOVE_LEFT"), Some(MouseMovement::Left));
+        assert_eq!(MouseMovement::from_zmk("MOVE_RIGHT"), Some(MouseMovement::Right));
+        assert_eq!(MouseMovement::from_zmk("BOGUS"), None);
+
+        assert_eq!(MouseMovement::from_qmk("KC_MS_U"), Some(MouseMovement::Up));
+        assert_eq!(MouseMovement::from_qmk("MS_DOWN"), Some(MouseMovement::Down));
+        assert_eq!(MouseMovement::from_qmk("KC_MS_L"), Some(MouseMovement::Left));
+        assert_eq!(MouseMovement::from_qmk("MS_RIGHT"), Some(MouseMovement::Right));
+        assert_eq!(MouseMovement::from_qmk("KC_A"), None);
+    }
+
+    #[test]
+    fn mouse_movement_renders_to_both_domains() {
+        assert_eq!(MouseMovement::Up.to_string(), "MOVE_UP");
+        assert_eq!(MouseMovement::Down.qmk_name(), "KC_MS_D");
+        assert_eq!(MouseMovement::Left.zmk_name(), "MOVE_LEFT");
+        assert_eq!(MouseMovement::Right.qmk_name(), "KC_MS_R");
+    }
+
+    #[test]
+    fn mouse_movement_from_str_tries_zmk_then_qmk_then_unknown() {
+        assert_eq!(MouseMovement::from("MOVE_UP"), MouseMovement::Up);
+        assert_eq!(MouseMovement::from("KC_MS_D"), MouseMovement::Down);
+        assert!(matches!(MouseMovement::from("BOGUS"), MouseMovement::Unknown(_)));
+        assert_eq!(MouseMovement::from(String::from("MOVE_LEFT")), MouseMovement::Left);
+    }
+
+    #[test]
+    fn mouse_movement_partial_eq_str() {
+        assert!(MouseMovement::Up == "MOVE_UP");
+        assert!(MouseMovement::Down == *"MOVE_DOWN");
+    }
+
+    #[test]
+    fn mouse_button_parses_zmk_and_qmk() {
+        assert_eq!(MouseButton::from_zmk("LCLK"), Some(MouseButton::Left));
+        assert_eq!(MouseButton::from_zmk("RCLK"), Some(MouseButton::Right));
+        assert_eq!(MouseButton::from_zmk("MCLK"), Some(MouseButton::Middle));
+        assert_eq!(MouseButton::from_zmk("BTN4"), Some(MouseButton::Button4));
+        assert_eq!(MouseButton::from_zmk("BTN5"), Some(MouseButton::Button5));
+        assert_eq!(MouseButton::from_zmk("BOGUS"), None);
+
+        assert_eq!(MouseButton::from_qmk("KC_BTN1"), Some(MouseButton::Left));
+        assert_eq!(MouseButton::from_qmk("BTN2"), Some(MouseButton::Right));
+        assert_eq!(MouseButton::from_qmk("KC_BTN3"), Some(MouseButton::Middle));
+        assert_eq!(MouseButton::from_qmk("KC_A"), None);
+    }
+
+    #[test]
+    fn mouse_button_renders_to_both_domains() {
+        assert_eq!(MouseButton::Left.to_string(), "LCLK");
+        assert_eq!(MouseButton::Right.qmk_name(), "KC_BTN2");
+        assert_eq!(MouseButton::Middle.zmk_name(), "MCLK");
+        assert_eq!(MouseButton::Button4.qmk_name(), "KC_BTN4");
+        assert_eq!(MouseButton::Button5.zmk_name(), "BTN5");
+    }
+
+    #[test]
+    fn mouse_button_from_str_tries_zmk_then_qmk_then_unknown() {
+        assert_eq!(MouseButton::from("LCLK"), MouseButton::Left);
+        assert_eq!(MouseButton::from("KC_BTN2"), MouseButton::Right);
+        assert!(matches!(MouseButton::from("BOGUS"), MouseButton::Unknown(_)));
+        assert_eq!(MouseButton::from(String::from("MCLK")), MouseButton::Middle);
+    }
+
+    #[test]
+    fn mouse_button_partial_eq_str() {
+        assert!(MouseButton::Left == "LCLK");
+        assert!(MouseButton::Right == *"RCLK");
+    }
+
+    #[test]
+    fn mouse_scroll_parses_zmk_and_qmk() {
+        assert_eq!(MouseScroll::from_zmk("SCRL_UP"), Some(MouseScroll::Up));
+        assert_eq!(MouseScroll::from_zmk("SCRL_DOWN"), Some(MouseScroll::Down));
+        assert_eq!(MouseScroll::from_zmk("SCRL_LEFT"), Some(MouseScroll::Left));
+        assert_eq!(MouseScroll::from_zmk("SCRL_RIGHT"), Some(MouseScroll::Right));
+        assert_eq!(MouseScroll::from_zmk("BOGUS"), None);
+
+        assert_eq!(MouseScroll::from_qmk("KC_WH_U"), Some(MouseScroll::Up));
+        assert_eq!(MouseScroll::from_qmk("MS_WH_DOWN"), Some(MouseScroll::Down));
+        assert_eq!(MouseScroll::from_qmk("WH_L"), Some(MouseScroll::Left));
+        assert_eq!(MouseScroll::from_qmk("KC_MS_WH_RIGHT"), Some(MouseScroll::Right));
+        assert_eq!(MouseScroll::from_qmk("KC_A"), None);
+    }
+
+    #[test]
+    fn mouse_scroll_renders_to_both_domains() {
+        assert_eq!(MouseScroll::Up.to_string(), "SCRL_UP");
+        assert_eq!(MouseScroll::Down.qmk_name(), "KC_WH_D");
+        assert_eq!(MouseScroll::Left.zmk_name(), "SCRL_LEFT");
+        assert_eq!(MouseScroll::Right.qmk_name(), "KC_WH_R");
+    }
+
+    #[test]
+    fn mouse_scroll_from_str_tries_zmk_then_qmk_then_unknown() {
+        assert_eq!(MouseScroll::from("SCRL_UP"), MouseScroll::Up);
+        assert_eq!(MouseScroll::from("KC_WH_D"), MouseScroll::Down);
+        assert!(matches!(MouseScroll::from("BOGUS"), MouseScroll::Unknown(_)));
+        assert_eq!(MouseScroll::from(String::from("SCRL_LEFT")), MouseScroll::Left);
+    }
+
+    #[test]
+    fn mouse_scroll_partial_eq_str() {
+        assert!(MouseScroll::Up == "SCRL_UP");
+        assert!(MouseScroll::Down == *"SCRL_DOWN");
+    }
+
+    #[test]
+    fn modifier_from_str_tries_zmk_then_qmk_then_unknown() {
+        assert_eq!(Modifier::from("LCTRL"), Modifier::LCtrl);
+        assert_eq!(Modifier::from("MOD_LSFT"), Modifier::LShft);
+        assert!(matches!(Modifier::from("BOGUS"), Modifier::Unknown(_)));
+        assert_eq!(Modifier::from(String::from("LGUI")), Modifier::LGui);
+    }
+
+    #[test]
+    fn modifier_partial_eq_str() {
+        assert!(Modifier::LAlt == "LALT");
+        assert!(Modifier::LCtrl == *"LCTRL");
+    }
+
+    #[test]
+    fn rgb_action_from_str_tries_zmk_then_qmk_then_unknown() {
+        assert_eq!(RgbAction::from("RGB_TOG"), RgbAction::Toggle);
+        assert_eq!(RgbAction::from("RGB_MOD"), RgbAction::EffectNext);
+        assert!(matches!(RgbAction::from("BOGUS"), RgbAction::Unknown(_)));
+        assert_eq!(RgbAction::from(String::from("RGB_EFR")), RgbAction::EffectPrev);
+    }
+
+    #[test]
+    fn rgb_action_partial_eq_str() {
+        assert!(RgbAction::Toggle == "RGB_TOG");
+        assert!(RgbAction::EffectNext == *"RGB_EFF");
+    }
+
+    #[test]
+    fn keyboard_cols_matches_known_boards() {
+        assert_eq!(keyboard_cols("planck/ez/glow"), Some(12));
+        assert_eq!(keyboard_cols("LAYOUT_crkbd_base"), Some(6));
+        assert_eq!(keyboard_cols("kyria_rev3"), Some(7));
+        assert_eq!(keyboard_cols("unknown_board"), None);
+        assert_eq!(keyboard_cols("PLANCK"), Some(12));
+    }
+
+    #[test]
+    fn key_expr_partial_eq_str() {
+        let key = KeyExpr::parse_zmk("A");
+        assert!(key == "A");
+        assert!(key == *"A");
+
+        let raw = KeyExpr::Raw("CUSTOM".into());
+        assert!(raw == "CUSTOM");
+
+        let modified = KeyExpr::parse_zmk("LG(A)");
+        assert!(modified == "LG(A)");
+    }
 }
