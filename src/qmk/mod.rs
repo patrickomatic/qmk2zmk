@@ -11,7 +11,6 @@ pub mod parse_json;
 
 use std::fmt::Write as _;
 
-use crate::codes::ToQmk as _;
 use crate::ir::{Key, Keyboard, TapDanceDef};
 
 /// Render a `Keyboard` as a QMK Configurator JSON string.
@@ -155,16 +154,16 @@ fn key_to_qmk_str(key: &Key, tap_dances: &[TapDanceDef]) -> String {
         Key::Kp(key) => key.to_qmk(),
         Key::Mo(n) => format!("MO({n})"),
         Key::Tog(n) => format!("TG({n})"),
-        Key::Sk(m) => format!("OSM({})", m.to_qmk()),
+        Key::Sk(m) => format!("OSM({})", m.qmk_mod_name()),
         Key::Sl(n) => format!("OSL({n})"),
         Key::To(n) => format!("TO({n})"),
         Key::Df(n) => format!("DF({n})"),
-        Key::Mmv(d) => d.to_qmk(),
-        Key::Mkp(b) => b.to_qmk(),
-        Key::Msc(d) => d.to_qmk(),
+        Key::Mmv(d) => d.qmk_name().to_string(),
+        Key::Mkp(b) => b.qmk_name().to_string(),
+        Key::Msc(d) => d.qmk_name().to_string(),
         Key::Lt(n, k) => format!("LT({n},{})", k.to_qmk()),
-        Key::Mt(m, k) => format!("MT({},{})", m.to_qmk(), k.to_qmk()),
-        Key::RgbUg(a) => a.to_qmk(),
+        Key::Mt(m, k) => format!("MT({},{})", m.qmk_mod_name(), k.to_qmk()),
+        Key::RgbUg(a) => a.qmk_name().to_string(),
         Key::Macro(name) => name.clone(),
         Key::TapDance(n) => tap_dances.get(*n).map_or_else(
             || format!("TD(DANCE_{n})"),

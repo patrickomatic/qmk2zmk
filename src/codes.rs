@@ -2,8 +2,9 @@
 //!
 //! QMK and ZMK generally describe the same HID usages, but they often use
 //! different symbolic names. Parsers normalize source spellings into the enums
-//! in this module, and renderers use [`ToQmk`] or [`ToZmk`] to write the target
-//! source format.
+//! in this module. Renderers write ZMK output via the standard [`fmt::Display`]
+//! impl (which uses ZMK spelling) and QMK output via each type's `qmk_name()`
+//! or `qmk_mod_name()` method.
 //!
 //! Examples of the most common spelling differences:
 //!
@@ -16,18 +17,6 @@
 //!   like `LG(C)`.
 
 use std::fmt;
-
-/// Convert a typed domain value to ZMK source spelling.
-pub trait ToZmk {
-    /// Return this value in ZMK syntax.
-    fn to_zmk(&self) -> String;
-}
-
-/// Convert a typed domain value to QMK source spelling.
-pub trait ToQmk {
-    /// Return this value in QMK syntax.
-    fn to_qmk(&self) -> String;
-}
 
 macro_rules! keycodes {
     ($(($variant:ident, $zmk:literal, $qmk:literal)),+ $(,)?) => {
@@ -303,18 +292,6 @@ fn keycode_from_qmk(qmk: &str) -> Option<KeyCode> {
     })
 }
 
-impl ToZmk for KeyCode {
-    fn to_zmk(&self) -> String {
-        self.zmk_name().to_string()
-    }
-}
-
-impl ToQmk for KeyCode {
-    fn to_qmk(&self) -> String {
-        self.qmk_name().to_string()
-    }
-}
-
 impl fmt::Display for KeyCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.zmk_name())
@@ -335,13 +312,24 @@ impl From<String> for KeyExpr {
 
 impl PartialEq<&str> for KeyExpr {
     fn eq(&self, other: &&str) -> bool {
-        self.to_zmk_string() == *other
+        match self {
+            Self::Key(code) => code.zmk_name() == *other,
+            Self::Raw(raw) => raw.as_str() == *other,
+            // Modified requires building the formatted string; allocation is unavoidable.
+            #[allow(clippy::cmp_owned)]
+            Self::Modified(_, _) => self.to_string() == *other,
+        }
     }
 }
 
 impl PartialEq<str> for KeyExpr {
     fn eq(&self, other: &str) -> bool {
-        self.to_zmk_string() == other
+        match self {
+            Self::Key(code) => code.zmk_name() == other,
+            Self::Raw(raw) => raw.as_str() == other,
+            #[allow(clippy::cmp_owned)]
+            Self::Modified(_, _) => self.to_string() == other,
+        }
     }
 }
 
@@ -439,18 +427,6 @@ impl Modifier {
             Self::RGui => "RGUI",
             Self::Unknown(raw) => raw,
         }
-    }
-}
-
-impl ToZmk for Modifier {
-    fn to_zmk(&self) -> String {
-        self.zmk_name().to_string()
-    }
-}
-
-impl ToQmk for Modifier {
-    fn to_qmk(&self) -> String {
-        self.qmk_mod_name().to_string()
     }
 }
 
@@ -565,6 +541,12 @@ impl ModPrefix {
     }
 }
 
+impl fmt::Display for ModPrefix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.zmk_name())
+    }
+}
+
 /// A typed key expression. Most expressions are a keycode, optionally wrapped in
 /// one or more modifier prefixes. `Raw` is reserved for source constructs that
 /// are not modeled yet but still need to round-trip visibly.
@@ -599,43 +581,24 @@ impl KeyExpr {
     }
 
     #[must_use]
-    pub fn to_zmk_string(&self) -> String {
-        match self {
-            Self::Key(code) => code.zmk_name().to_string(),
-            Self::Modified(prefix, inner) => {
-                format!("{}({})", prefix.zmk_name(), inner.to_zmk_string())
-            }
-            Self::Raw(raw) => raw.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn to_qmk_string(&self) -> String {
+    pub fn to_qmk(&self) -> String {
         match self {
             Self::Key(code) => code.qmk_name().to_string(),
             Self::Modified(prefix, inner) => {
-                format!("{}({})", prefix.qmk_fn_name(), inner.to_qmk_string())
+                format!("{}({})", prefix.qmk_fn_name(), inner.to_qmk())
             }
             Self::Raw(raw) => raw.clone(),
         }
-    }
-}
-
-impl ToZmk for KeyExpr {
-    fn to_zmk(&self) -> String {
-        self.to_zmk_string()
-    }
-}
-
-impl ToQmk for KeyExpr {
-    fn to_qmk(&self) -> String {
-        self.to_qmk_string()
     }
 }
 
 impl fmt::Display for KeyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.to_zmk_string())
+        match self {
+            Self::Key(code) => f.write_str(code.zmk_name()),
+            Self::Modified(prefix, inner) => write!(f, "{prefix}({inner})"),
+            Self::Raw(raw) => f.write_str(raw),
+        }
     }
 }
 
@@ -733,18 +696,6 @@ impl RgbAction {
             Self::SpeedDec => "RGB_SPD",
             Self::Unknown(raw) => raw,
         }
-    }
-}
-
-impl ToZmk for RgbAction {
-    fn to_zmk(&self) -> String {
-        self.zmk_name().to_string()
-    }
-}
-
-impl ToQmk for RgbAction {
-    fn to_qmk(&self) -> String {
-        self.qmk_name().to_string()
     }
 }
 
@@ -974,42 +925,6 @@ impl MouseScroll {
     }
 }
 
-impl ToZmk for MouseMovement {
-    fn to_zmk(&self) -> String {
-        self.zmk_name().to_string()
-    }
-}
-
-impl ToQmk for MouseMovement {
-    fn to_qmk(&self) -> String {
-        self.qmk_name().to_string()
-    }
-}
-
-impl ToZmk for MouseButton {
-    fn to_zmk(&self) -> String {
-        self.zmk_name().to_string()
-    }
-}
-
-impl ToQmk for MouseButton {
-    fn to_qmk(&self) -> String {
-        self.qmk_name().to_string()
-    }
-}
-
-impl ToZmk for MouseScroll {
-    fn to_zmk(&self) -> String {
-        self.zmk_name().to_string()
-    }
-}
-
-impl ToQmk for MouseScroll {
-    fn to_qmk(&self) -> String {
-        self.qmk_name().to_string()
-    }
-}
-
 impl fmt::Display for MouseMovement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.zmk_name())
@@ -1172,10 +1087,10 @@ mod tests {
 
     #[test]
     fn keycodes_render_to_both_domains() {
-        assert_eq!(KeyCode::Lbkt.to_zmk(), "LBKT");
-        assert_eq!(KeyCode::Lbkt.to_qmk(), "KC_LBRC");
-        assert_eq!(KeyCode::Ret.to_zmk(), "RET");
-        assert_eq!(KeyCode::Ret.to_qmk(), "KC_ENTER");
+        assert_eq!(KeyCode::Lbkt.to_string(), "LBKT");
+        assert_eq!(KeyCode::Lbkt.qmk_name(), "KC_LBRC");
+        assert_eq!(KeyCode::Ret.to_string(), "RET");
+        assert_eq!(KeyCode::Ret.qmk_name(), "KC_ENTER");
     }
 
     #[test]
@@ -1190,8 +1105,8 @@ mod tests {
     fn modifiers_parse_and_render() {
         assert_eq!(Modifier::from_qmk("MOD_LSFT"), Some(Modifier::LShft));
         assert_eq!(Modifier::from_zmk("LCTRL"), Some(Modifier::LCtrl));
-        assert_eq!(Modifier::LGui.to_zmk(), "LGUI");
-        assert_eq!(Modifier::LGui.to_qmk(), "MOD_LGUI");
+        assert_eq!(Modifier::LGui.to_string(), "LGUI");
+        assert_eq!(Modifier::LGui.qmk_mod_name(), "MOD_LGUI");
     }
 
     #[test]
@@ -1208,8 +1123,8 @@ mod tests {
         assert_eq!(RgbAction::from_qmk("RGB_MOD"), Some(RgbAction::EffectNext));
         assert_eq!(RgbAction::from_qmk("RGB_RMOD"), Some(RgbAction::EffectPrev));
         assert_eq!(RgbAction::from_zmk("RGB_SPI"), Some(RgbAction::SpeedInc));
-        assert_eq!(RgbAction::EffectNext.to_zmk(), "RGB_EFF");
-        assert_eq!(RgbAction::EffectNext.to_qmk(), "RGB_MODE_FORWARD");
+        assert_eq!(RgbAction::EffectNext.to_string(), "RGB_EFF");
+        assert_eq!(RgbAction::EffectNext.qmk_name(), "RGB_MODE_FORWARD");
         assert_eq!(RgbAction::from_qmk("NOT_RGB"), None);
     }
 
